@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 pwd
-preprocessed=0
+preprocessed=1
 
 export data="./data"
 export root="./glove_experiment"
@@ -23,9 +23,9 @@ then
   echo "Finished Preprocessing!"
 fi
 
-
+echo "Creating Embeddings..."
 ././../OpenNMT-py/tools/embeddings_to_torch.py -emb_file "$glove_dir/glove.6B.100d.txt" \
                                -dict_file "$root/data.vocab.pt" \
                                -output_file "$root/embeddings"
 
-
+echo "Embeddings created!"

@@ -40,7 +40,7 @@ with open("data/valid.src.txt", 'wb') as f:
     for annot in val["annotations"]:
         cap = dict(annot)["caption"]
     # vocab.update(set(cap.lower().rstrip("\n").rstrip(".").rstrip(",").split(" ")))
-        f.write(" ".join(tokenizer(cap)) + "\n")
+        f.write(" ".join(tokenizer(cap.rstrip("."))) + "\n")
 
 with open("data/train.src.txt", 'wb') as f:
     for annot in train["annotations"]:
