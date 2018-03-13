@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 pwd
-preprocessed=1
+preprocessed=0
 
 export data="./data"
 export root="./glove_experiment"
