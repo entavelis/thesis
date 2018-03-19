@@ -10,10 +10,10 @@ _Subgoals:_
 - Train S2S with GloVe Embeddings
 
 
-###Questions###
+### Questions
 
 How to create [Sentence Embeddings](http://forum.opennmt.net/t/sentence-embeddings-for-english/1389) with [OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py)
 
-###Based on:
+### Based on:
 
 [OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py)
