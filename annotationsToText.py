@@ -35,17 +35,19 @@ train = json.load(open(annotations + 'captions_train2014.json', 'r'))
 #        path=(annotations + 'captions_val2014.json'), format='json',
 #        fields={'annotations': ('caption',  data.Field(sequential=True, tokenize=tokenizer, lower=True))})
 
-vocab = set([])
+validvocab = set([])
 with open("data/valid.src.txt", 'wb') as f:
     for annot in val["annotations"]:
-        cap = dict(annot)["caption"]
-    # vocab.update(set(cap.lower().rstrip("\n").rstrip(".").rstrip(",").split(" ")))
-        f.write(" ".join(tokenizer(cap.rstrip("."))) + "\n")
+        cap = tokenizer(dict(annot)["caption"].rstrip("."))
+        validvocab.update(set(cap))
+        f.write(" ".join(cap) + "\n")
 
+trainvocab = set([])
 with open("data/train.src.txt", 'wb') as f:
     for annot in train["annotations"]:
-        cap = dict(annot)["caption"]
-        f.writelines(" ".join(tokenizer(cap)) + "\n")
+        cap = tokenizer(dict(annot)["caption"].rstrip("."))
+        trainvocab.update(set(cap))
+        f.writelines(" ".join(cap) + "\n")
     # vocab.update(set(cap.lower().rstrip("\n").rstrip(".").rstrip(",").split(" ")))
 
     # vocab.update(set(tokenizer(cap)))
@@ -53,7 +55,9 @@ with open("data/train.src.txt", 'wb') as f:
 # vocab_size = len(vocab)
 # word_to_ix = {word: i for i, word in enumerate(vocab)}
 #
-
+print("Train Vocabulary Length: %d" % len(trainvocab))
+print("Valid Vocabulary Length: %d" % len(validvocab))
+print("Total Vocabulary Length: %d" % len(validvocab.union(trainvocab)))
 
 
 
