@@ -7,7 +7,7 @@ __Goals for Friday 23/3:__
 Having a trainable Model of Seq2Seq AE and Im2Im AE
 
 _Subgoals:_
-- Train S2S with GloVe Embeddings
+- ~~Train S2S with GloVe Embeddings~~ __Done__
 
 
 ### Questions
