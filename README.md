@@ -15,6 +15,8 @@ _Subgoals:_
 How to create [Sentence Embeddings](http://forum.opennmt.net/t/sentence-embeddings-for-english/1389) with [OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py)
 
 __Answer:__ Wait for the bug to be fixed...
+
 ### Based on:
-[DiscoGAN](https://github.com/SKTBrain/DiscoGAN)
-[OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py)
+
+- [DiscoGAN](https://github.com/SKTBrain/DiscoGAN)
+- [OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py)
