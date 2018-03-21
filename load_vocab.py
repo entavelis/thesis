@@ -10,4 +10,9 @@ import torch
 import torch.nn as nn
 from torch import cuda
 
-voc = torch.load("./glove_experiments/data.vocab.pt")
+voc = torch.load("./glove_experiment/data.vocab.pt")
+
+for ob in voc[0][1].freqs:
+    print(ob)
+
+print(len(voc[0][1].freqs))

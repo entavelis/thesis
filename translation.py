@@ -170,7 +170,7 @@ def main():
         test_I = test_I.cuda()
         test_T = test_T.cuda()
         
-#           generator_A = generator_A.cuda()
+#          generator_A = generator_A.cuda()
   #        generator_A = generator_A.cuda()
         encoder_Txt = encoder_Txt.cuda()
         decoder_Img = decoder_Img.cuda()

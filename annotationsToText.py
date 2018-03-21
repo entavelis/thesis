@@ -28,6 +28,8 @@ def tokenizer(text): # create a tokenizer function
 
 # annotations = "/media/ctrlaltv/USBitch/MSCOCO/annotations/"
 annotations = "annotations/"
+
+print("Loading MSCOCO annotation data...")
 val = json.load(open(annotations + 'captions_val2014.json', 'r'))
 train = json.load(open(annotations + 'captions_train2014.json', 'r'))
 
@@ -35,19 +37,25 @@ train = json.load(open(annotations + 'captions_train2014.json', 'r'))
 #        path=(annotations + 'captions_val2014.json'), format='json',
 #        fields={'annotations': ('caption',  data.Field(sequential=True, tokenize=tokenizer, lower=True))})
 
+print("Creating Validation Source File")
 validvocab = set([])
 with open("data/valid.src.txt", 'wb') as f:
     for annot in val["annotations"]:
-        cap = tokenizer(dict(annot)["caption"].rstrip("."))
+        cap = tokenizer(dict(annot)["caption"].rstrip(".").lower())
+        # cap = dict(annot)["caption"].rstrip(".").lower()
         validvocab.update(set(cap))
+        # f.writelines(cap + "\n")
         f.write(" ".join(cap) + "\n")
 
+print("Creating Training Source File")
 trainvocab = set([])
 with open("data/train.src.txt", 'wb') as f:
     for annot in train["annotations"]:
-        cap = tokenizer(dict(annot)["caption"].rstrip("."))
+        cap = tokenizer(dict(annot)["caption"].rstrip(".").lower())
+        # cap = dict(annot)["caption"].rstrip(".").lower()
         trainvocab.update(set(cap))
-        f.writelines(" ".join(cap) + "\n")
+        # f.writelines(cap + "\n")
+        f.writelines(str(" ".join(cap)) + "\n")
     # vocab.update(set(cap.lower().rstrip("\n").rstrip(".").rstrip(",").split(" ")))
 
     # vocab.update(set(tokenizer(cap)))
