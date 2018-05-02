@@ -1,10 +1,9 @@
-
 # coding: utf-8
 
 # In[ ]:
 
 
-## import os
+import os
 import argparse
 from itertools import chain
 import torch
@@ -17,9 +16,8 @@ from model import *
 import scipy
 from progressbar import ETA, Bar, Percentage, ProgressBar
 
-parser = argparse.ArgumentParser(description='PyTorch implementation of DiscoGAN')
+parser = argparse.ArgumentParser()
 parser.add_argument('--cuda', type=str, default='true', help='Set cuda usage')
-parser.add_argument('--task_name', type=str, default='facescrub', help='Set data name')
 parser.add_argument('--epoch_size', type=int, default=5000, help='Set epoch size')
 parser.add_argument('--batch_size', type=int, default=64, help='Set batch size')
 parser.add_argument('--learning_rate', type=float, default=0.0002, help='Set learning rate for optimizer')
@@ -42,6 +40,35 @@ parser.add_argument('--update_interval', type=int, default=3, help='')
 parser.add_argument('--log_interval', type=int, default=50, help='Print loss values every log_interval iterations.')
 parser.add_argument('--image_save_interval', type=int, default=1000, help='Save test results every image_save_interval iterations.')
 parser.add_argument('--model_save_interval', type=int, default=10000, help='Save models every model_save_interval iterations.')
+parser.add_argument('--model_path', type=str, default='./models/' ,
+                    help='path for saving trained models')
+
+parser.add_argument('--crop_size', type=int, default=224 ,
+                    help='size for randomly cropping images')
+parser.add_argument('--vocab_path', type=str, default='./data/vocab.pkl',
+                    help='path for vocabulary wrapper')
+parser.add_argument('--image_dir', type=str, default='./data/resized2014' ,
+                    help='directory for resized images')
+parser.add_argument('--caption_path', type=str,
+                    default='./data/annotations/captions_train2014.json',
+                    help='path for train annotation json file')
+parser.add_argument('--log_step', type=int , default=10,
+                    help='step size for prining log info')
+parser.add_argument('--save_step', type=int , default=1000,
+                    help='step size for saving trained models')
+
+# Model parameters
+parser.add_argument('--embed_size', type=int , default=256 ,
+                    help='dimension of word embedding vectors')
+parser.add_argument('--hidden_size', type=int , default=512 ,
+                    help='dimension of lstm hidden states')
+parser.add_argument('--num_layers', type=int , default=1 ,
+                    help='number of layers in lstm')
+
+parser.add_argument('--num_epochs', type=int, default=5)
+parser.add_argument('--batch_size', type=int, default=128)
+parser.add_argument('--num_workers', type=int, default=2)
+parser.add_argument('--learning_rate', type=float, default=0.001)
 
 def as_np(data):
     return data.cpu().data.numpy()
@@ -115,11 +142,6 @@ def main():
     else:
         cuda = False
 
-    task_name = args.task_name
-
-    epoch_size = args.epoch_size
-    batch_size = args.batch_size
-
     result_path = os.path.join( args.result_path, args.task_name )
     if args.style_A:
         result_path = os.path.join( result_path, args.style_A )
@@ -130,27 +152,14 @@ def main():
         model_path = os.path.join( model_path, args.style_A )
     model_path = os.path.join( model_path, args.model_arch )
 
-    data_style_A, data_style_B, test_style_A, test_style_B = get_data()
-
-    if args.task_name.startswith('edges2'):
-        test_I = read_images( test_style_A, 'A', args.image_size )
-        test_T = read_images( test_style_B, 'B', args.image_size )
-
-    elif args.task_name == 'handbags2shoes' or args.task_name == 'shoes2handbags':
-        test_I = read_images( test_style_A, 'B', args.image_size )
-        test_T = read_images( test_style_B, 'B', args.image_size )
-
-    else:
-        test_I = read_images( test_style_A, None, args.image_size )
-        test_T = read_images( test_style_B, None, args.image_size )
-
-    test_I = Variable( torch.FloatTensor( test_I ), volatile=True )
-    test_T = Variable( torch.FloatTensor( test_T ), volatile=True )
-
     if not os.path.exists(result_path):
         os.makedirs(result_path)
     if not os.path.exists(model_path):
         os.makedirs(model_path)
+
+    epoch_size = args.epoch_size
+    batch_size = args.batch_size
+
 
 #     generator_A = Generator()
     encoder_Img = TextEncoder()
@@ -167,8 +176,8 @@ def main():
     discriminator_Txt = TextDiscriminator()
 
     if cuda:
-        test_I = test_I.cuda()
-        test_T = test_T.cuda()
+        # test_I = test_I.cuda()
+        # test_T = test_T.cuda()
         
 #          generator_A = generator_A.cuda()
   #        generator_A = generator_A.cuda()

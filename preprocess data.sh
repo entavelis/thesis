@@ -39,7 +39,6 @@ then
 fi
 
 
-
 if [[ preprocessed -ne 1 ]];
 then
   # Added shared_vocab
@@ -79,6 +78,9 @@ then
   -batch_size 64 \
   -layers 2 \
   -rnn_size 200 \
+  -input-feed 0 \
+  -encoder-type "brnn" \
+  -rnn-type "GRU" \
   -share_embeddings \
   -share_decoder_embeddings \
   -word_vec_size 100 \

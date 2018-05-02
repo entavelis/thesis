@@ -74,25 +74,26 @@ class TextDecoder(nn.Module):
 class ImageEncoder(nn.Module):
     def __init__(
             self,
-            extra_layers=False
+            extra_layers=False,
+            img_dimension=256
             ):
 
         super(ImageEncoder, self).__init__()
 
         if extra_layers == True:
             self.main = nn.Sequential(
-                nn.Conv2d(3, 64, 4, 2, 1, bias=False),
+                nn.Conv2d(3, img_dimension, 4, 2, 1, bias=False),
                 nn.LeakyReLU(0.2, inplace=True),
-                nn.Conv2d(64, 64 * 2, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(64 * 2),
+                nn.Conv2d(img_dimension, img_dimension * 2, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 2),
                 nn.LeakyReLU(0.2, inplace=True),
-                nn.Conv2d(64 * 2, 64 * 4, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(64 * 4),
+                nn.Conv2d(img_dimension * 2, img_dimension * 4, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 4),
                 nn.LeakyReLU(0.2, inplace=True),
-                nn.Conv2d(64 * 4, 64 * 8, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(64 * 8),
+                nn.Conv2d(img_dimension * 4, img_dimension * 8, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 8),
                 nn.LeakyReLU(0.2, inplace=True),
-                nn.Conv2d(64 * 8, 100, 4, 1, 0, bias=False),
+                nn.Conv2d(img_dimension * 8, 100, 4, 1, 0, bias=False),
                 nn.BatchNorm2d(100),
                 nn.LeakyReLU(0.2, inplace=True),
             )
@@ -100,16 +101,16 @@ class ImageEncoder(nn.Module):
 
         if extra_layers == False:
             self.main = nn.Sequential(
-                nn.Conv2d(3, 64, 4, 2, 1, bias=False),
+                nn.Conv2d(3, img_dimension, 4, 2, 1, bias=False),
                 nn.LeakyReLU(0.2, inplace=True),
-                nn.Conv2d(64, 64 * 2, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(64 * 2),
+                nn.Conv2d(img_dimension, img_dimension * 2, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 2),
                 nn.LeakyReLU(0.2, inplace=True),
-                nn.Conv2d(64 * 2, 64 * 4, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(64 * 4),
+                nn.Conv2d(img_dimension * 2, img_dimension * 4, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 4),
                 nn.LeakyReLU(0.2, inplace=True),
-                nn.Conv2d(64 * 4, 64 * 8, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(64 * 8),
+                nn.Conv2d(img_dimension * 4, img_dimension * 8, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 8),
                 nn.LeakyReLU(0.2, inplace=True),
 
             )
@@ -120,42 +121,43 @@ class ImageEncoder(nn.Module):
 class ImageDecoder(nn.Module):
     def __init__(
             self,
-            extra_layers=False
+            extra_layers=False,
+            img_dimension=256
             ):
 
         super(ImageDecoder, self).__init__()
 
         if extra_layers == True:
             self.main = nn.Sequential(
-                nn.ConvTranspose2d(100, 64 * 8, 4, 1, 0, bias=False),
-                nn.BatchNorm2d(64 * 8),
+                nn.ConvTranspose2d(100, img_dimension * 8, 4, 1, 0, bias=False),
+                nn.BatchNorm2d(img_dimension * 8),
                 nn.ReLU(True),
-                nn.ConvTranspose2d(64 * 8, 64 * 4, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(64 * 4),
+                nn.ConvTranspose2d(img_dimension * 8, img_dimension * 4, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 4),
                 nn.ReLU(True),
-                nn.ConvTranspose2d(64 * 4, 64 * 2, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(64 * 2),
+                nn.ConvTranspose2d(img_dimension * 4, img_dimension * 2, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 2),
                 nn.ReLU(True),
-                nn.ConvTranspose2d(64 * 2,     64, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(64),
+                nn.ConvTranspose2d(img_dimension * 2,     img_dimension, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension),
                 nn.ReLU(True),
-                nn.ConvTranspose2d(    64,      3, 4, 2, 1, bias=False),
+                nn.ConvTranspose2d(img_dimension,      3, 4, 2, 1, bias=False),
                 nn.Sigmoid()
             )
 
 
         if extra_layers == False:
             self.main = nn.Sequential(
-                nn.ConvTranspose2d(64 * 8, 64 * 4, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(64 * 4),
+                nn.ConvTranspose2d(img_dimension * 8, img_dimension * 4, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 4),
                 nn.ReLU(True),
-                nn.ConvTranspose2d(64 * 4, 64 * 2, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(64 * 2),
+                nn.ConvTranspose2d(img_dimension * 4, img_dimension * 2, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 2),
                 nn.ReLU(True),
-                nn.ConvTranspose2d(64 * 2,     64, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(64),
+                nn.ConvTranspose2d(img_dimension * 2,     img_dimension, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension),
                 nn.ReLU(True),
-                nn.ConvTranspose2d(    64,      3, 4, 2, 1, bias=False),
+                nn.ConvTranspose2d(img_dimension,      3, 4, 2, 1, bias=False),
                 nn.Sigmoid()
             )
 
