@@ -9,11 +9,13 @@ import torch.optim as optim
 from torch.autograd import Variable
 from torch.nn.utils.rnn import pack_padded_sequence
 from torchvision import transforms
+from torchtext import vocab
 from model import *
 import pickle
 
 from image_caption.build_vocab import Vocabulary
 from image_caption.data_loader import get_loader
+
 
 
 from progressbar import ETA, Bar, Percentage, ProgressBar
@@ -25,16 +27,8 @@ parser.add_argument('--learning_rate', type=float, default=0.0002, help='Set lea
 parser.add_argument('--result_path', type=str, default='./results/',
                     help='Set the path the result images will be saved.')
 parser.add_argument('--model_path', type=str, default='./models/', help='Set the path for trained models')
-parser.add_argument('--model_arch', type=str, default='discogan',
-                    help='choose among gan/recongan/discogan. gan - standard GAN, recongan - GAN with reconstruction, discogan - DiscoGAN.')
-parser.add_argument('--image_size', type=int, default=64, help='Image size. 64 for every experiment in the paper')
 
-parser.add_argument('--gan_curriculum', type=int, default=10000,
-                    help='Strong GAN loss for certain period at the beginning')
-parser.add_argument('--starting_rate', type=float, default=0.01,
-                    help='Set the lambda weight between GAN loss and Recon loss during curriculum period at the beginning. We used the 0.01 weight.')
-parser.add_argument('--default_rate', type=float, default=0.5,
-                    help='Set the lambda weight between GAN loss and Recon loss after curriculum period. We used the 0.5 weight.')
+parser.add_argument('--image_size', type=int, default=256, help='Image size. 64 for every experiment in the paper')
 
 parser.add_argument('--update_interval', type=int, default=3, help='')
 parser.add_argument('--log_interval', type=int, default=50, help='Print loss values every log_interval iterations.')
@@ -51,6 +45,11 @@ parser.add_argument('--vocab_path', type=str, default='./data/vocab.pkl',
                     help='path for vocabulary wrapper')
 parser.add_argument('--image_dir', type=str, default='./data/resized2014',
                     help='directory for resized images')
+parser.add_argument('--embedding_size', type=int, default=100)
+
+parser.add_argument('--embedding_path', type=str,
+                    default='./glove/',
+                    help='path for pretrained embeddings')
 parser.add_argument('--caption_path', type=str,
                     default='./data/annotations/captions_train2014.json',
                     help='path for train annotation json file')
@@ -71,6 +70,20 @@ parser.add_argument('--num_epochs', type=int, default=5)
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--num_workers', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.001)
+
+
+#source: https://github.com/A-Jacobson/CNN_Sentence_Classification/blob/master/WordVectors.ipynb
+def load_glove_embeddings(path, word2idx, embedding_dim=100):
+    with open(path) as f:
+        embeddings = np.zeros((len(word2idx), embedding_dim))
+        for line in f.readlines():
+            values = line.split()
+            word = values[0]
+            index = word2idx.get(word)
+            if index:
+                vector = np.array(values[1:], dtype='float32')
+                embeddings[index] = vector
+        return torch.from_numpy(embeddings).float()
 
 
 def to_var(x, volatile=False):
@@ -115,12 +128,24 @@ def main():
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 
+
     epoch_size = args.epoch_size
     batch_size = args.batch_size
 
     # Load vocabulary wrapper.
     with open(args.vocab_path, 'rb') as f:
         vocab = pickle.load(f)
+
+    # Load Embeddings
+    emb_size = args.embedding_size
+    emb_path = args.embedding_path
+    if args.embedding_path[-1]=='/':
+        emb_path += 'glove.6B.' + str(emb_size) + 'd.txt'
+
+    emb = load_glove_embeddings(emb_path, vocab, emb_size)
+
+    glove = vocab.GloVe(name='6B', dim=emb_size)
+
 
     # Build data loader
     data_loader = get_loader(args.image_dir, args.caption_path, vocab,
