@@ -144,7 +144,6 @@ def main():
 
     emb = load_glove_embeddings(emb_path, vocab, emb_size)
 
-    glove = vocab.GloVe(name='6B', dim=emb_size)
 
 
     # Build data loader
