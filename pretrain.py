@@ -136,8 +136,8 @@ def main():
 
     print("Loading Embeddings...")
     emb = load_glove_embeddings(emb_path, vocab.word2idx, emb_size)
-
-
+    emb = nn.Embedding(emb.size(0), emb.size(1))
+    emb.weight = nn.Parameter(emb)
 
     # Build data loader
     print("Building Data Loader...")
