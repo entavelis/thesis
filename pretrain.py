@@ -136,8 +136,12 @@ def main():
 
     print("Loading Embeddings...")
     emb = load_glove_embeddings(emb_path, vocab.word2idx, emb_size)
-    emb = nn.Embedding(emb.size(0), emb.size(1))
-    emb.weight = nn.Parameter(emb)
+
+    glove_emb = nn.Embedding(emb.size(0), emb.size(1))
+    glove_emb.weight = nn.Parameter(emb)
+
+    # Freeze weighs
+    glove_emb.weight.requires_grad = False
 
     # Build data loader
     print("Building Data Loader...")
@@ -147,8 +151,8 @@ def main():
 
     print("Setting up the Networks...")
     #     generator_A = Generator()
-    encoder_Img = TextEncoder(emb)
-    decoder_Txt = ImageDecoder(TextEncoder, emb)
+    encoder_Img = TextEncoder(glove_emb)
+    decoder_Txt = ImageDecoder(TextEncoder, glove_emb)
 
     #     generator_B = Generator()
     encoder_Txt = ImageEncoder()
