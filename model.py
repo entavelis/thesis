@@ -77,7 +77,7 @@ class DecoderRNN(nn.Module):
         self.embed = embeds
         self.embed_size = self.embed.embedding_dimension
         self.lstm = nn.LSTM(self.embed_size, hidden_size, num_layers, batch_first=True)
-        self.linear = nn.Linear(hidden_size, embed)
+        self.linear = nn.Linear(hidden_size, self.embed_size)
         self.init_weights()
 
     def init_weights(self):
@@ -304,7 +304,7 @@ class ImageEncoder(nn.Module):
                 nn.Conv2d(img_dimension * 4, img_dimension * 8, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension * 8),
                 nn.LeakyReLU(0.2, inplace=True),
-                nn.Conv2d(img_dimension * 8, 100, 4, 1, 0, bias=False),
+                nn.Conv2d(img_dimension * 8, feature_dimension, 4, 1, 0, bias=False),
                 nn.BatchNorm2d(feature_dimension),
                 nn.LeakyReLU(0.2, inplace=True),
             )
@@ -341,7 +341,7 @@ class ImageDecoder(nn.Module):
 
         if extra_layers == True:
             self.main = nn.Sequential(
-                nn.ConvTranspose2d(f, img_dimension * 8, 4, 1, 0, bias=False),
+                nn.ConvTranspose2d(feature_dimension, img_dimension * 8, 4, 1, 0, bias=False),
                 nn.BatchNorm2d(img_dimension * 8),
                 nn.ReLU(True),
                 nn.ConvTranspose2d(img_dimension * 8, img_dimension * 4, 4, 2, 1, bias=False),
