@@ -237,6 +237,12 @@ def main():
                 txt_loss.backward()
                 txt_optim.step()
 
+            if i % args.log_interval == 0:
+                print("---------------------")
+                print("Img Loss: " + as_np(img_rc_loss.mean()))
+                print("Txt Loss: " + as_np(img_rc_loss.mean()))
+                print("Cross-Modal Loss: " + as_np(cm_loss.mean()))
+
             # Save the models
             if (i+1) % args.save_step == 0:
                 torch.save(decoder_Img.state_dict(),
