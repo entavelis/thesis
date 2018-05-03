@@ -32,7 +32,7 @@ def pad_sequences(seqs):
     for i, seq in enumerate(seqs):
         end = lens[i]
         # Changed from Long to Float because: embeddings
-        padded_seqs[i, :end] = torch.FloatTensor(seq[:end])
+        padded_seqs[i, :end] = torch.LongTensor(seq[:end])
     return padded_seqs, lens
 
 def valid_params(params):
