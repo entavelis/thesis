@@ -151,12 +151,12 @@ def main():
 
     print("Setting up the Networks...")
     #     generator_A = Generator()
-    encoder_Img = TextEncoder(glove_emb)
-    decoder_Txt = ImageDecoder(TextEncoder, glove_emb)
+    encoder_Txt = TextEncoder(glove_emb)
+    decoder_Txt = TextDecoder(TextEncoder, glove_emb)
 
     #     generator_B = Generator()
-    encoder_Txt = ImageEncoder()
-    decoder_Img = TextDecoder()
+    encoder_Img = ImageEncoder()
+    decoder_Img = ImageDecoder()
 
     if cuda:
         # test_I = test_I.cuda()
