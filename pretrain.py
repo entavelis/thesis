@@ -86,6 +86,7 @@ def load_glove_embeddings(path, word2idx, embedding_dim=100):
         return torch.from_numpy(embeddings).float()
 
 
+
 def to_var(x, volatile=False):
     if torch.cuda.is_available():
         x = x.cuda()
@@ -122,9 +123,6 @@ def main():
         os.makedirs(model_path)
 
 
-    epoch_size = args.epoch_size
-    batch_size = args.batch_size
-
     # Load vocabulary wrapper.
     print("Loading Vocabulary...")
     with open(args.vocab_path, 'rb') as f:
@@ -137,7 +135,7 @@ def main():
         emb_path += 'glove.6B.' + str(emb_size) + 'd.txt'
 
     print("Loading Embeddings...")
-    # emb = load_glove_embeddings(emb_path, vocab, emb_size)
+    emb = load_glove_embeddings(emb_path, vocab, emb_size)
 
 
 
@@ -149,8 +147,8 @@ def main():
 
     print("Setting up the Networks...")
     #     generator_A = Generator()
-    encoder_Img = TextEncoder()
-    decoder_Txt = ImageDecoder()
+    encoder_Img = TextEncoder(emb)
+    decoder_Txt = ImageDecoder(TextEncoder, emb)
 
     #     generator_B = Generator()
     encoder_Txt = ImageEncoder()
