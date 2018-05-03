@@ -34,3 +34,6 @@ def pad_sequences(seqs):
         padded_seqs[i, :end] = torch.LongTensor(seq[:end])
     return padded_seqs, lens
 
+def valid_params(params):
+    return [p for p in params if p.requires_grad]
+
