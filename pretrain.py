@@ -152,7 +152,7 @@ def main():
     print("Setting up the Networks...")
     #     generator_A = Generator()
     encoder_Txt = TextEncoder(glove_emb)
-    decoder_Txt = TextDecoder(TextEncoder, glove_emb)
+    decoder_Txt = TextDecoder(encoder_Txt, glove_emb)
 
     #     generator_B = Generator()
     encoder_Img = ImageEncoder()
