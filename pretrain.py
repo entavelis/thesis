@@ -56,6 +56,8 @@ parser.add_argument('--log_step', type=int, default=10,
 parser.add_argument('--save_step', type=int, default=1000,
                     help='step size for saving trained models')
 
+parse.add_argument('--extra_layers', type=str, default='true')
+
 # Model parameters
 parser.add_argument('--embedding_size', type=int, default=100)
 parser.add_argument('--hidden_size', type=int, default=300,
@@ -158,8 +160,8 @@ def main():
 
 
     #     generator_B = Generator()
-    encoder_Img = ImageEncoder(feature_dimension= args.hidden_size)
-    decoder_Img = ImageDecoder(feature_dimension= args.hidden_size)
+    encoder_Img = ImageEncoder(feature_dimension= args.hidden_size, extra_layers= (args.extra_layers == 'true'))
+    decoder_Img = ImageDecoder(feature_dimension= args.hidden_size, extra_layers= (args.extra_layers == 'true'))
 
     if cuda:
         # test_I = test_I.cuda()
