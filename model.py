@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torch.nn.utils.rnn import pack_padded_sequence
+
 from torch.autograd import Variable
 # import ipdb
 
@@ -67,9 +69,49 @@ latent_dim = 300
 #                              embeddings,
 #                              reuse_copy_attn)
 
+
+class DecoderRNN(nn.Module):
+    def __init__(self, embeds, hidden_size = 300 , num_layers=1):
+        """Set the hyper-parameters and build the layers."""
+        super(DecoderRNN, self).__init__()
+        self.embed = embeds
+        self.embed_size = self.embed.embedding_dimension
+        self.lstm = nn.LSTM(self.embed_size, hidden_size, num_layers, batch_first=True)
+        self.linear = nn.Linear(hidden_size, self.embed_size)
+        self.init_weights()
+
+    def init_weights(self):
+        """Initialize weights."""
+        # self.embed.weight.data.uniform_(-0.1, 0.1)
+        self.linear.weight.data.uniform_(-0.1, 0.1)
+        self.linear.bias.data.fill_(0)
+
+    def forward(self, features, captions, lengths):
+        """Decode image feature vectors and generates captions."""
+        embeddings = self.embed(captions)
+        embeddings = torch.cat((features.unsqueeze(1), embeddings), 1)
+        packed = pack_padded_sequence(embeddings, lengths, batch_first=True)
+        hiddens, _ = self.lstm(packed)
+        outputs = self.linear(hiddens[0])
+        return outputs
+
+    def sample(self, features, states=None):
+        """Samples captions for given image features (Greedy search)."""
+        sampled_ids = []
+        inputs = features.unsqueeze(1)
+        for i in range(20):                                      # maximum sampling length
+            hiddens, states = self.lstm(inputs, states)          # (batch_size, 1, hidden_size),
+            outputs = self.linear(hiddens.squeeze(1))            # (batch_size, vocab_size)
+            predicted = outputs.max(1)[1]
+            sampled_ids.append(predicted)
+            inputs = self.embed(predicted)
+            inputs = inputs.unsqueeze(1)                         # (batch_size, 1, embed_size)
+        sampled_ids = torch.cat(sampled_ids, 1)                  # (batch_size, 20)
+        return sampled_ids.squeeze()
+
 #source: https://github.com/howardyclo/pytorch-seq2seq-example/blob/master/seq2seq.ipynb
 class TextEncoder(nn.Module):
-    def __init__(self, embedding=None, rnn_type='LSTM', hidden_size=128, num_layers=1, dropout=0.3, bidirectional=True):
+    def __init__(self, embedding=None, rnn_type='LSTM', hidden_size=300, num_layers=1, dropout=0.3, bidirectional=True):
         super(TextEncoder, self).__init__()
 
         self.num_layers = num_layers
@@ -155,7 +197,7 @@ class TextEncoder(nn.Module):
         return hidden
 
 class TextDecoder(nn.Module):
-        def __init__(self, encoder, embedding=None, bias=True, tie_embeddings=False, dropout=0.3):
+        def __init__(self, encoder, embedding=None, bias=True, tie_embeddings=True, dropout=0.3):
             """ General attention in `Effective Approaches to Attention-based Neural Machine Translation`
                 Ref: https://arxiv.org/abs/1508.04025
 
@@ -241,8 +283,9 @@ class TextDecoder(nn.Module):
 class ImageEncoder(nn.Module):
     def __init__(
             self,
-            extra_layers=False,
-            img_dimension=256
+            extra_layers=True,
+            img_dimension=256,
+            feature_dimension = 300
             ):
 
         super(ImageEncoder, self).__init__()
@@ -261,7 +304,7 @@ class ImageEncoder(nn.Module):
                 nn.BatchNorm2d(img_dimension * 8),
                 nn.LeakyReLU(0.2, inplace=True),
                 nn.Conv2d(img_dimension * 8, 100, 4, 1, 0, bias=False),
-                nn.BatchNorm2d(100),
+                nn.BatchNorm2d(feature_dimension),
                 nn.LeakyReLU(0.2, inplace=True),
             )
 
@@ -289,14 +332,15 @@ class ImageDecoder(nn.Module):
     def __init__(
             self,
             extra_layers=False,
-            img_dimension=256
+            img_dimension=256,
+            feature_dimension =300
             ):
 
         super(ImageDecoder, self).__init__()
 
         if extra_layers == True:
             self.main = nn.Sequential(
-                nn.ConvTranspose2d(100, img_dimension * 8, 4, 1, 0, bias=False),
+                nn.ConvTranspose2d(feature_dimension, img_dimension * 8, 4, 1, 0, bias=False),
                 nn.BatchNorm2d(img_dimension * 8),
                 nn.ReLU(True),
                 nn.ConvTranspose2d(img_dimension * 8, img_dimension * 4, 4, 2, 1, bias=False),
