@@ -303,7 +303,7 @@ class ImageEncoder(nn.Module):
                 nn.Conv2d(img_dimension * 4, img_dimension * 8, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension * 8),
                 nn.LeakyReLU(0.2, inplace=True),
-                nn.Conv2d(img_dimension * 8, 100, 4, 1, 0, bias=False),
+                nn.Conv2d(img_dimension * 8, feature_dimension, 4, 1, 0, bias=False),
                 nn.BatchNorm2d(feature_dimension),
                 nn.LeakyReLU(0.2, inplace=True),
             )
