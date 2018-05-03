@@ -44,7 +44,6 @@ parser.add_argument('--vocab_path', type=str, default='./data/vocab.pkl',
                     help='path for vocabulary wrapper')
 parser.add_argument('--image_dir', type=str, default='./data/resized2014',
                     help='directory for resized images')
-parser.add_argument('--embedding_size', type=int, default=100)
 
 parser.add_argument('--embedding_path', type=str,
                     default='./glove/',
@@ -58,9 +57,8 @@ parser.add_argument('--save_step', type=int, default=1000,
                     help='step size for saving trained models')
 
 # Model parameters
-parser.add_argument('--embed_size', type=int, default=256,
-                    help='dimension of word embedding vectors')
-parser.add_argument('--hidden_size', type=int, default=512,
+parser.add_argument('--embedding_size', type=int, default=100)
+parser.add_argument('--hidden_size', type=int, default=300,
                     help='dimension of lstm hidden states')
 parser.add_argument('--num_layers', type=int, default=1,
                     help='number of layers in lstm')
@@ -153,15 +151,15 @@ def main():
 
     print("Setting up the Networks...")
     #     generator_A = Generator()
-    encoder_Txt = TextEncoder(glove_emb)
+    encoder_Txt = TextEncoder(glove_emb, hidden_size=args.hidden_size)
     # decoder_Txt = TextDecoder(encoder_Txt, glove_emb)
-    decoder_Txt = DecoderRNN(glove_emb)
+    decoder_Txt = DecoderRNN(glove_emb, hidden_size=args.hidden_size)
 
 
 
     #     generator_B = Generator()
-    encoder_Img = ImageEncoder()
-    decoder_Img = ImageDecoder()
+    encoder_Img = ImageEncoder(feature_dimension= args.hidden_size)
+    decoder_Img = ImageDecoder(feature_dimension= args.hidden_size)
 
     if cuda:
         # test_I = test_I.cuda()
