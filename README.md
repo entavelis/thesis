@@ -29,4 +29,5 @@ __Goals:__
 ---------------
 
 Promotor: Professor Marie-Francine Moens
+
 Daily Supervisor: Guillem Collell Talleda
