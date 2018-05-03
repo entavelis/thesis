@@ -13,7 +13,6 @@ from torchtext import vocab
 from model import *
 import pickle
 
-# from image_caption.build_vocab import Vocabulary
 from image_caption.data_loader import get_loader
 
 
