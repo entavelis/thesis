@@ -27,3 +27,5 @@ _Subgoals:_
 
 - [DiscoGAN](https://github.com/SKTBrain/DiscoGAN)
 - [OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py)
+- [PyTorch-Seq2Seq Example](https://github.com/howardyclo/pytorch-seq2seq-example/)
+- [CNN-Sentence_Classification](https://github.com/A-Jacobson/CNN_Sentence_Classification)
