@@ -75,7 +75,7 @@ class DecoderRNN(nn.Module):
         """Set the hyper-parameters and build the layers."""
         super(DecoderRNN, self).__init__()
         self.embed = embeds
-        self.embed_size = self.embed.embedding_dimension
+        self.embed_size = self.embed.embedding_dim
         self.lstm = nn.LSTM(self.embed_size, hidden_size, num_layers, batch_first=True)
         self.linear = nn.Linear(hidden_size, self.embed_size)
         self.init_weights()
