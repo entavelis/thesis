@@ -67,7 +67,7 @@ parser.add_argument('--num_layers', type=int, default=1,
 
 parser.add_argument('--fixed_embeddings', type=str, default="true")
 parser.add_argument('--num_epochs', type=int, default=5)
-parser.add_argument('--batch_size', type=int, default=128)
+parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--num_workers', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.001)
 
@@ -154,7 +154,10 @@ def main():
     print("Setting up the Networks...")
     #     generator_A = Generator()
     encoder_Txt = TextEncoder(glove_emb)
-    decoder_Txt = TextDecoder(encoder_Txt, glove_emb)
+    # decoder_Txt = TextDecoder(encoder_Txt, glove_emb)
+    decoder_Txt = DecoderRNN(glove_emb)
+
+
 
     #     generator_B = Generator()
     encoder_Img = ImageEncoder()
@@ -205,12 +208,14 @@ def main():
         for i, (images, captions, lengths) in enumerate(data_loader):
             pbar.update(i)
 
-            print(captions)
-
             # Set mini-batch dataset
             images = to_var(images, volatile=True)
             captions = to_var(captions)
             targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+
+            # Set training mode
+            encoder_Txt.train()
+            decoder_Txt.train()
 
             #Forward, Backward and Optimize
             img_dec_optim.zero_grad()
@@ -225,11 +230,12 @@ def main():
 
             img_rc_loss = img_criterion(IzI,images)
 
-            for cap in captions:
-                Tz = encoder_Txt(cap)
-                TzT = decoder_Txt(Tz)
-                txt_rc_loss = txt_criterion(TzT,cap)
-                cm_loss = cm_criterion(Iz,Tz)
+            Tz = encoder_Txt(captions, args.batch_size)
+            TzT = decoder_Txt(Tz, captions, lengths)
+
+
+            txt_rc_loss = txt_criterion(TzT,targets)
+            cm_loss = cm_criterion(Iz,Tz)
 
 
             rate = 0.9
