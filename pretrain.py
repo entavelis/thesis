@@ -185,9 +185,9 @@ def main():
         for i, (images, captions, lengths) in enumerate(data_loader):
             pbar.update(i)
 
-            # Set mini-batch dataset
+            # Set mini-batch dataset //ATTENTION CHECK TYPES DISCOGAN
             images = to_var(images, volatile=True)
-            captions = to_var(captions)
+            # captions = to_var(captions)
             targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
             # Set training mode
