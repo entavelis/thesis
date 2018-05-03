@@ -33,6 +33,8 @@ def pad_sequences(seqs):
         end = lens[i]
         # Changed from Long to Float because: embeddings
         padded_seqs[i, :end] = torch.LongTensor(seq[:end])
+
+    padded_seqs.transpose(0, 1)
     return padded_seqs, lens
 
 def valid_params(params):
