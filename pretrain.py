@@ -13,6 +13,8 @@ from torchtext import vocab
 from model import *
 import pickle
 
+from utils import *
+
 from image_caption.build_vocab import Vocabulary
 from image_caption.data_loader import get_loader
 
@@ -70,31 +72,6 @@ parser.add_argument('--num_epochs', type=int, default=5)
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--num_workers', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.001)
-
-
-#source: https://github.com/A-Jacobson/CNN_Sentence_Classification/blob/master/WordVectors.ipynb
-def load_glove_embeddings(path, word2idx, embedding_dim=100):
-    print("Loading from path: " + path)
-    with open(path,encoding='utf-8') as f:
-        embeddings = np.zeros((len(word2idx), embedding_dim))
-        for line in f.readlines():
-            values = line.split()
-            word = values[0]
-            index = word2idx.get(word)
-            if index:
-                vector = np.array(values[1:], dtype='float32')
-                embeddings[index] = vector
-        return torch.from_numpy(embeddings).float()
-
-
-
-def to_var(x, volatile=False):
-    if torch.cuda.is_available():
-        x = x.cuda()
-    return Variable(x, volatile=volatile)
-
-def as_np(data):
-    return data.cpu().data.numpy()
 
 def main():
     # global args
@@ -230,7 +207,8 @@ def main():
 
             img_rc_loss = img_criterion(IzI,images)
 
-            Tz = encoder_Txt(captions, list([len(cap) for cap in captions]))
+            src_seqs, src_lens = pad_sequences(captions)
+            Tz = encoder_Txt(src_seqs, src_lens)
             TzT = decoder_Txt(Tz, captions, lengths)
 
 

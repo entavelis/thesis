@@ -162,12 +162,12 @@ def main():
 
 
 #     generator_A = Generator()
-    encoder_Img = TextEncoder()
-    decoder_Txt = ImageDecoder()
+    encoder_Img = ImageEncoder()
+    decoder_Txt = TextDecoder()
     
 #     generator_B = Generator()
-    encoder_Txt = ImageEncoder()
-    decoder_Img = TextDecoder()
+    encoder_Txt = TextEncoder()
+    decoder_Img = ImageDecoder()
  
 #     discriminator_A = Discriminator()
     disciminator_Img = ImageDiscriminator()
