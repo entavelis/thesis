@@ -142,7 +142,7 @@ def main():
     glove_emb.weight = nn.Parameter(emb)
 
     # Freeze weighs
-    if args.fixed_embeddings:
+    if args.fixed_embeddings == "true":
         glove_emb.weight.requires_grad = False
 
     # Build data loader
