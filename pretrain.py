@@ -26,7 +26,6 @@ parser.add_argument('--epoch_size', type=int, default=5000, help='Set epoch size
 parser.add_argument('--learning_rate', type=float, default=0.0002, help='Set learning rate for optimizer')
 parser.add_argument('--result_path', type=str, default='./results/',
                     help='Set the path the result images will be saved.')
-parser.add_argument('--model_path', type=str, default='./models/', help='Set the path for trained models')
 
 parser.add_argument('--image_size', type=int, default=256, help='Image size. 64 for every experiment in the paper')
 
@@ -36,6 +35,7 @@ parser.add_argument('--image_save_interval', type=int, default=1000,
                     help='Save test results every image_save_interval iterations.')
 parser.add_argument('--model_save_interval', type=int, default=10000,
                     help='Save models every model_save_interval iterations.')
+
 parser.add_argument('--model_path', type=str, default='./models/',
                     help='path for saving trained models')
 
