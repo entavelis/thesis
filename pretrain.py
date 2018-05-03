@@ -183,12 +183,14 @@ def main():
 
     #     gen_params = chain(generator_A.parameters(), generator_B.parameters())
     print("Setting up the Optimizers...")
-    img_params = chain(decoder_Img.parameters(), encoder_Img.parameters())
-    txt_params = chain(decoder_Txt.parameters(), encoder_Txt.parameters())
+    # img_params = chain(decoder_Img.parameters(), encoder_Img.parameters())
+    # txt_params = chain(decoder_Txt.parameters(), encoder_Txt.parameters())
 
     # ATTENTION: Check betas and weight decay
-    img_optim = optim.Adam( img_params, lr=args.learning_rate, betas=(0.5,0.999), weight_decay=0.00001)
-    txt_optim = optim.Adam( txt_params, lr=args.learning_rate, betas=(0.5,0.999), weight_decay=0.00001)
+    img_enc_optim = optim.Adam(encoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
+    img_dec_optim = optim.Adam(decoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
+    txt_enc_optim = optim.Adam(encoder_Txt.parameters(), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
+    txt_dec_optim = optim.Adam(decoder_Txt.parameters(), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
 
 
     total_step = len(data_loader)
@@ -211,11 +213,12 @@ def main():
             targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
             #Forward, Backward and Optimize
-            encoder_Img.zero_grad()
-            decoder_Img.zero_grad()
+            img_dec_optim.zero_grad()
+            img_enc_optim.zero_grad()
 
-            encoder_Txt.zero_grad()
-            decoder_Txt.zero_grad()
+            txt_dec_optim.zero_grad()
+            txt_enc_optim.zero_grad()
+
 
             Iz = encoder_Img(images)
             IzI = decoder_Img(Iz)
@@ -236,10 +239,12 @@ def main():
             # Half of the times we update one pipeline the others the other one
             if i % 2 == 0:
                 img_loss.backward()
-                img_optim.step()
+                img_enc_optim.step()
+                img_dec_optim.step()
             else:
                 txt_loss.backward()
-                txt_optim.step()
+                txt_enc_optim.step()
+                txt_dec_optim.step()
 
             if i % args.log_interval == 0:
                 print("---------------------")
