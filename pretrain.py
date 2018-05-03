@@ -230,7 +230,7 @@ def main():
 
             img_rc_loss = img_criterion(IzI,images)
 
-            Tz = encoder_Txt(captions, args.batch_size)
+            Tz = encoder_Txt(captions, torch.tensor([len(cap) for cap in captions]) )
             TzT = decoder_Txt(Tz, captions, lengths)
 
 
