@@ -167,6 +167,7 @@ def main():
     # txt_params = chain(decoder_Txt.parameters(), encoder_Txt.parameters())
 
     # ATTENTION: Check betas and weight decay
+    # ATTENTION: Check why valid_params fails on image networks with out of memory error
     img_enc_optim = optim.Adam(encoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
     img_dec_optim = optim.Adam(decoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
     txt_enc_optim = optim.Adam(valid_params(encoder_Txt.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)

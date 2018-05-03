@@ -143,6 +143,7 @@ class TextEncoder(nn.Module):
 
         # (max_src_len, batch_size) => (max_src_len, batch_size, word_vec_size)
         emb = self.embedding(src_seqs)
+        print(emb)
 
         # packed_emb:
         # - data: (sum(batch_sizes), word_vec_size)
@@ -303,7 +304,7 @@ class ImageEncoder(nn.Module):
                 nn.Conv2d(img_dimension * 4, img_dimension * 8, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension * 8),
                 nn.LeakyReLU(0.2, inplace=True),
-                nn.Conv2d(img_dimension * 8, feature_dimension, 4, 1, 0, bias=False),
+                nn.Conv2d(img_dimension * 8, , 4, 1, 0, bias=False),
                 nn.BatchNorm2d(feature_dimension),
                 nn.LeakyReLU(0.2, inplace=True),
             )
