@@ -56,7 +56,6 @@ parser.add_argument('--log_step', type=int, default=10,
 parser.add_argument('--save_step', type=int, default=1000,
                     help='step size for saving trained models')
 
-parse.add_argument('--extra_layers', type=str, default='true')
 
 # Model parameters
 parser.add_argument('--embedding_size', type=int, default=100)
@@ -65,6 +64,7 @@ parser.add_argument('--hidden_size', type=int, default=300,
 parser.add_argument('--num_layers', type=int, default=1,
                     help='number of layers in lstm')
 
+parser.add_argument('--extra_layers', type=str, default='true')
 parser.add_argument('--fixed_embeddings', type=str, default="true")
 parser.add_argument('--num_epochs', type=int, default=5)
 parser.add_argument('--batch_size', type=int, default=64)
