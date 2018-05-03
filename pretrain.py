@@ -73,6 +73,7 @@ parser.add_argument('--learning_rate', type=float, default=0.001)
 
 #source: https://github.com/A-Jacobson/CNN_Sentence_Classification/blob/master/WordVectors.ipynb
 def load_glove_embeddings(path, word2idx, embedding_dim=100):
+    print("Loading from path: " + path)
     with open(path) as f:
         embeddings = np.zeros((len(word2idx), embedding_dim))
         for line in f.readlines():
