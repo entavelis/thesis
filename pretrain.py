@@ -209,6 +209,10 @@ def main():
             img_rc_loss = img_criterion(IzI,images)
 
             src_seqs, src_lens = pad_sequences(captions)
+
+            if cuda:
+                src_seqs = src_seqs.cuda()
+
             Tz = encoder_Txt(src_seqs, src_lens)
             TzT = decoder_Txt(Tz, captions, lengths)
 
