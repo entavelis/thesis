@@ -167,8 +167,8 @@ def main():
     # txt_params = chain(decoder_Txt.parameters(), encoder_Txt.parameters())
 
     # ATTENTION: Check betas and weight decay
-    img_enc_optim = optim.Adam(valid_params(encoder_Img.parameters()), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
-    img_dec_optim = optim.Adam(valid_params(decoder_Img.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
+    img_enc_optim = optim.Adam(encoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
+    img_dec_optim = optim.Adam(decoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
     txt_enc_optim = optim.Adam(valid_params(encoder_Txt.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
     txt_dec_optim = optim.Adam(valid_params(decoder_Txt.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
 
