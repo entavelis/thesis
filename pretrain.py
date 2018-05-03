@@ -23,7 +23,6 @@ from progressbar import ETA, Bar, Percentage, ProgressBar
 parser = argparse.ArgumentParser()
 parser.add_argument('--cuda', type=str, default='true', help='Set cuda usage')
 parser.add_argument('--epoch_size', type=int, default=5000, help='Set epoch size')
-parser.add_argument('--learning_rate', type=float, default=0.0002, help='Set learning rate for optimizer')
 parser.add_argument('--result_path', type=str, default='./results/',
                     help='Set the path the result images will be saved.')
 
@@ -113,15 +112,8 @@ def main():
         transforms.Normalize((0.485, 0.456, 0.406),
                              (0.229, 0.224, 0.225))])
 
-    result_path = os.path.join(args.result_path, args.task_name)
-    if args.style_A:
-        result_path = os.path.join(result_path, args.style_A)
-    result_path = os.path.join(result_path, args.model_arch)
-
-    model_path = os.path.join(args.model_path, args.task_name)
-    if args.style_A:
-        model_path = os.path.join(model_path, args.style_A)
-    model_path = os.path.join(model_path, args.model_arch)
+    result_path = args.result_path
+    model_path = args.model_path
 
     if not os.path.exists(result_path):
         os.makedirs(result_path)
