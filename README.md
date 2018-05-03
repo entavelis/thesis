@@ -4,8 +4,11 @@ I am going to use the README as a tracker of Goals per Week,
 
 __Goals:__
 
-- Train the []_pre_training_ autoencoder network](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf)
-- Test it on a cr
+- Train the [_pre_training_ paired autoencoder network](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf)
+- Test it on a Cross Modal Retrieval Task
+    - Measure mAP 
+    - Measure Top-k Error Rate
+    
 
 ### Questions
 
