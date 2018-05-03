@@ -137,7 +137,7 @@ def main():
         emb_path += 'glove.6B.' + str(emb_size) + 'd.txt'
 
     print("Loading Embeddings...")
-    emb = load_glove_embeddings(emb_path, vocab, emb_size)
+    # emb = load_glove_embeddings(emb_path, vocab, emb_size)
 
 
 
