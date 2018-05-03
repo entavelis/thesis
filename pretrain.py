@@ -221,9 +221,8 @@ def main():
                 Tz = encoder_Txt(captions)
                 TzT = decoder_Txt(Tz)
                 txt_rc_loss = txt_criterion(TzT,captions)
+                cm_loss = cm_criterion(Iz,Tz)
 
-            txt_rc_loss = txt_criterion(TzT,captions)
-            cm_loss = cm_criterion(Iz,Tz)
 
             rate = 0.9
             img_loss = img_rc_loss * (1 - rate) + cm_loss * rate
