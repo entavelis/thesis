@@ -65,6 +65,7 @@ parser.add_argument('--hidden_size', type=int, default=512,
 parser.add_argument('--num_layers', type=int, default=1,
                     help='number of layers in lstm')
 
+parser.add_argument('--fixed_embeddings', type=str, default="true")
 parser.add_argument('--num_epochs', type=int, default=5)
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--num_workers', type=int, default=2)
@@ -141,7 +142,8 @@ def main():
     glove_emb.weight = nn.Parameter(emb)
 
     # Freeze weighs
-    glove_emb.weight.requires_grad = False
+    if args.fixed_embeddings:
+        glove_emb.weight.requires_grad = False
 
     # Build data loader
     print("Building Data Loader...")
@@ -221,9 +223,9 @@ def main():
             img_rc_loss = img_criterion(IzI,images)
 
             for cap in captions:
-                Tz = encoder_Txt(captions)
+                Tz = encoder_Txt(cap)
                 TzT = decoder_Txt(Tz)
-                txt_rc_loss = txt_criterion(TzT,captions)
+                txt_rc_loss = txt_criterion(TzT,cap)
                 cm_loss = cm_criterion(Iz,Tz)
 
 
