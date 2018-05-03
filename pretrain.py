@@ -133,6 +133,7 @@ def main():
     batch_size = args.batch_size
 
     # Load vocabulary wrapper.
+    print("Loading Vocabulary...")
     with open(args.vocab_path, 'rb') as f:
         vocab = pickle.load(f)
 
@@ -142,15 +143,18 @@ def main():
     if args.embedding_path[-1]=='/':
         emb_path += 'glove.6B.' + str(emb_size) + 'd.txt'
 
+    print("Loading Embeddings...")
     emb = load_glove_embeddings(emb_path, vocab, emb_size)
 
 
 
     # Build data loader
+    print("Building Data Loader...")
     data_loader = get_loader(args.image_dir, args.caption_path, vocab,
                              transform, args.batch_size,
                              shuffle=True, num_workers=args.num_workers)
 
+    print("Setting up the Networks...")
     #     generator_A = Generator()
     encoder_Img = TextEncoder()
     decoder_Txt = ImageDecoder()
@@ -175,11 +179,13 @@ def main():
 
 
     # Losses and Optimizers
+    print("Setting up the Objective Functions...")
     img_criterion = nn.MSELoss()
     txt_criterion = nn.CrossEntropyLoss()
     cm_criterion = nn.MSELoss()
 
     #     gen_params = chain(generator_A.parameters(), generator_B.parameters())
+    print("Setting up the Optimizers...")
     img_params = chain(decoder_Img.parameters(), encoder_Img.parameters())
     txt_params = chain(decoder_Txt.parameters(), encoder_Txt.parameters())
 
@@ -187,9 +193,6 @@ def main():
     img_optim = optim.Adam( img_params, lr=args.learning_rate, betas=(0.5,0.999), weight_decay=0.00001)
     txt_optim = optim.Adam( txt_params, lr=args.learning_rate, betas=(0.5,0.999), weight_decay=0.00001)
 
-
-    gen_loss_total = []
-    dis_loss_total = []
 
     total_step = len(data_loader)
     for epoch in range(args.num_epochs):
@@ -203,6 +206,8 @@ def main():
         for i, (images, captions, lengths) in enumerate(data_loader):
             pbar.update(i)
 
+            print(captions)
+
             # Set mini-batch dataset
             images = to_var(images, volatile=True)
             captions = to_var(captions)
@@ -210,18 +215,21 @@ def main():
 
             #Forward, Backward and Optimize
             encoder_Img.zero_grad()
-            encoder_Txt.zero_grad()
-
-            decoder_Txt.zero_grad()
             decoder_Img.zero_grad()
 
-            Iz = encoder_Img(images)
-            Tz = encoder_Txt(captions)
+            encoder_Txt.zero_grad()
+            decoder_Txt.zero_grad()
 
-            TzT = decoder_Txt(Tz)
+            Iz = encoder_Img(images)
             IzI = decoder_Img(Iz)
 
             img_rc_loss = img_criterion(IzI,images)
+
+            for cap in captions:
+                Tz = encoder_Txt(captions)
+                TzT = decoder_Txt(Tz)
+                txt_rc_loss = txt_criterion(TzT,captions)
+
             txt_rc_loss = txt_criterion(TzT,captions)
             cm_loss = cm_criterion(Iz,Tz)
 
@@ -232,7 +240,7 @@ def main():
             # Half of the times we update one pipeline the others the other one
             if i % 2 == 0:
                 img_loss.backward()
-                txt_optim.step()
+                img_optim.step()
             else:
                 txt_loss.backward()
                 txt_optim.step()

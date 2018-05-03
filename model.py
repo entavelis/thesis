@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch.autograd import Variable
-import ipdb
+# import ipdb
 
 from onmt import Models
 import numpy as np
@@ -15,62 +15,62 @@ paddings=[0,0,1]
 latent_dim = 300
 
     
-class TextEncoderOld(nn.Module):
-    def __init__(
-            self,
-            embeddings
-            ):
-        super(TextEncoder, self).__init__()
-        
-        self.hidden_dim = embedding_dim
-
-        rnn_type = "GRU"
-        brnn = True
-        enc_layers = 100
-        rnn_size = latent_dim
-        dropout = 0.3
-        bridge = True
-        self.encoder = Models.RNNEncoder(rnn_type, brnn, enc_layers,
-                          rnn_size, dropout, embeddings,
-                          bridge)
-
-    def forward(self, src, lengths):
-
-        # tgt = tgt[:-1]  # exclude last target from inputs
-        return self.encoder(src, lengths)
-
-class TextDecoderOld(nn.Module):
-    def __init__(
-            self,
-            embeddings
-            ):
-
-        rnn_type = "GRU"
-        brnn = True
-        dec_layers =2
-        rnn_size = latent_dim
-        global_attention = True
-        coverage_attn = True
-        context_gate = True
-        copy_attn = True
-        dropout = 0.3
-        reuse_copy_attn = True
-
-
-        self.decoder = Models.StdRNNDecoder(rnn_type, brnn,
-                             dec_layers, rnn_size,
-                             global_attention,
-                             coverage_attn,
-                             context_gate,
-                             copy_attn,
-                             dropout,
-                             embeddings,
-                             reuse_copy_attn)
+# class TextEncoderOld(nn.Module):
+#     def __init__(
+#             self,
+#             embeddings
+#             ):
+#         super(TextEncoder, self).__init__()
+#
+#         self.hidden_dim = embedding_dim
+#
+#         rnn_type = "GRU"
+#         brnn = True
+#         enc_layers = 100
+#         rnn_size = latent_dim
+#         dropout = 0.3
+#         bridge = True
+#         self.encoder = Models.RNNEncoder(rnn_type, brnn, enc_layers,
+#                           rnn_size, dropout, embeddings,
+#                           bridge)
+#
+#     def forward(self, src, lengths):
+#
+#         # tgt = tgt[:-1]  # exclude last target from inputs
+#         return self.encoder(src, lengths)
+#
+# class TextDecoderOld(nn.Module):
+#     def __init__(
+#             self,
+#             embeddings
+#             ):
+#
+#         rnn_type = "GRU"
+#         brnn = True
+#         dec_layers =2
+#         rnn_size = latent_dim
+#         global_attention = True
+#         coverage_attn = True
+#         context_gate = True
+#         copy_attn = True
+#         dropout = 0.3
+#         reuse_copy_attn = True
+#
+#
+#         self.decoder = Models.StdRNNDecoder(rnn_type, brnn,
+#                              dec_layers, rnn_size,
+#                              global_attention,
+#                              coverage_attn,
+#                              context_gate,
+#                              copy_attn,
+#                              dropout,
+#                              embeddings,
+#                              reuse_copy_attn)
 
 #source: https://github.com/howardyclo/pytorch-seq2seq-example/blob/master/seq2seq.ipynb
 class TextEncoder(nn.Module):
     def __init__(self, embedding=None, rnn_type='LSTM', hidden_size=128, num_layers=1, dropout=0.3, bidirectional=True):
-        super(EncoderRNN, self).__init__()
+        super(TextEncoder, self).__init__()
 
         self.num_layers = num_layers
         self.dropout = dropout
@@ -155,9 +155,11 @@ class TextEncoder(nn.Module):
         return hidden
 
 class TextDecoder(nn.Module):
-        def __init__(self, encoder, embedding=None, attention=False, bias=True, tie_embeddings=False, dropout=0.3):
+        def __init__(self, encoder, embedding=None, bias=True, tie_embeddings=False, dropout=0.3):
             """ General attention in `Effective Approaches to Attention-based Neural Machine Translation`
                 Ref: https://arxiv.org/abs/1508.04025
+
+                Removed Attention
 
                 Share input and output embeddings:
                 Ref:
@@ -166,13 +168,12 @@ class TextDecoder(nn.Module):
                     - "Tying Word Vectors and Word Classifiers: A Loss Framework for Language Modeling" (Inan et al. 2016)
                        https://arxiv.org/abs/1611.01462
             """
-            super(LuongAttnDecoderRNN, self).__init__()
+            super(TextDecoder, self).__init__()
 
             self.hidden_size = encoder.hidden_size * encoder.num_directions
             self.num_layers = encoder.num_layers
             self.dropout = dropout
             self.embedding = embedding
-            self.attention = attention
             self.tie_embeddings = tie_embeddings
 
             self.vocab_size = self.embedding.num_embeddings
@@ -184,12 +185,6 @@ class TextDecoder(nn.Module):
                 hidden_size=self.hidden_size,
                 num_layers=self.num_layers,
                 dropout=self.dropout)
-
-            if self.attention:
-                self.W_a = nn.Linear(encoder.hidden_size * encoder.num_directions,
-                                     self.hidden_size, bias=bias)
-                self.W_c = nn.Linear(encoder.hidden_size * encoder.num_directions + self.hidden_size,
-                                     self.hidden_size, bias=bias)
 
             if self.tie_embeddings:
                 self.W_proj = nn.Linear(self.hidden_size, self.word_vec_size, bias=bias)
@@ -224,69 +219,7 @@ class TextDecoder(nn.Module):
             # (seq_len=1, batch_size, hidden_size) => (batch_size, seq_len=1, hidden_size)
             decoder_output = decoder_output.transpose(0, 1)
 
-            """ 
-            ------------------------------------------------------------------------------------------
-            Notes of computing attention scores
-            ------------------------------------------------------------------------------------------
-            # For-loop version:
-
-            max_src_len = encoder_outputs.size(0)
-            batch_size = encoder_outputs.size(1)
-            attention_scores = Variable(torch.zeros(batch_size, max_src_len))
-
-            # For every batch, every time step of encoder's hidden state, calculate attention score.
-            for b in range(batch_size):
-                for t in range(max_src_len):
-                    # Loung. eq(8) -- general form content-based attention:
-                    attention_scores[b,t] = decoder_output[b].dot(attention.W_a(encoder_outputs[t,b]))
-
-            ------------------------------------------------------------------------------------------
-            # Vectorized version:
-
-            1. decoder_output: (batch_size, seq_len=1, hidden_size)
-            2. encoder_outputs: (max_src_len, batch_size, hidden_size * num_directions)
-            3. W_a(encoder_outputs): (max_src_len, batch_size, hidden_size)
-                            .transpose(0,1)  : (batch_size, max_src_len, hidden_size) 
-                            .transpose(1,2)  : (batch_size, hidden_size, max_src_len)
-            4. attention_scores: 
-                            (batch_size, seq_len=1, hidden_size) * (batch_size, hidden_size, max_src_len) 
-                            => (batch_size, seq_len=1, max_src_len)
-            """
-
-            if self.attention:
-                # attention_scores: (batch_size, seq_len=1, max_src_len)
-                attention_scores = torch.bmm(decoder_output, self.W_a(encoder_outputs).transpose(0, 1).transpose(1, 2))
-
-                # attention_mask: (batch_size, seq_len=1, max_src_len)
-                attention_mask = sequence_mask(src_lens).unsqueeze(1)
-
-                # Fills elements of tensor with `-float('inf')` where `mask` is 1.
-                attention_scores.data.masked_fill_(1 - attention_mask.data, -float('inf'))
-
-                # attention_weights: (batch_size, seq_len=1, max_src_len) => (batch_size, max_src_len) for `F.softmax`
-                # => (batch_size, seq_len=1, max_src_len)
-                try:  # torch 0.3.x
-                    attention_weights = F.softmax(attention_scores.squeeze(1), dim=1).unsqueeze(1)
-                except:
-                    attention_weights = F.softmax(attention_scores.squeeze(1)).unsqueeze(1)
-
-                # context_vector:
-                # (batch_size, seq_len=1, max_src_len) * (batch_size, max_src_len, encoder_hidden_size * num_directions)
-                # => (batch_size, seq_len=1, encoder_hidden_size * num_directions)
-                context_vector = torch.bmm(attention_weights, encoder_outputs.transpose(0, 1))
-
-                # concat_input: (batch_size, seq_len=1, encoder_hidden_size * num_directions + decoder_hidden_size)
-                concat_input = torch.cat([context_vector, decoder_output], -1)
-
-                # (batch_size, seq_len=1, encoder_hidden_size * num_directions + decoder_hidden_size) => (batch_size, seq_len=1, decoder_hidden_size)
-                concat_output = F.tanh(self.W_c(concat_input))
-
-                # Prepare returns:
-                # (batch_size, seq_len=1, max_src_len) => (batch_size, max_src_len)
-                attention_weights = attention_weights.squeeze(1)
-            else:
-                attention_weights = None
-                concat_output = decoder_output
+            concat_output = decoder_output
 
             # If input and output embeddings are tied,
             # project `decoder_hidden_size` to `word_vec_size`.
@@ -302,7 +235,7 @@ class TextDecoder(nn.Module):
 
             del src_lens
 
-            return output, decoder_hidden, attention_weights
+            return output, decoder_hidden
 
 
 class ImageEncoder(nn.Module):
