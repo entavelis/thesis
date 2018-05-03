@@ -1,5 +1,7 @@
 # Integrating Video and Language with Generative Adversarial Networks
 
+![](abstract/media/mmmGanwide.png)
+
 I am going to use the README as a tracker of Goals per Week,
 
 __Goals:__
@@ -8,8 +10,8 @@ __Goals:__
 - Test it on a Cross Modal Retrieval Task
     - Measure mAP 
     - Measure Top-k Error Rate
-    
 
+![](abstract/media/pretraining.png)
 ### Questions
 
 ### Notes
