@@ -1,0 +1,113 @@
+% --------------------------------------------------------------
+% This is all preamble stuff that you don't have to worry about.
+% Head down to where it says "Start here"
+% --------------------------------------------------------------
+ 
+\documentclass[twocolumn]{article}
+ 
+ 
+\usepackage[margin=1in]{geometry} 
+\usepackage{amsmath,amsthm,amssymb}
+\usepackage{graphicx}
+\usepackage{cite}
+\graphicspath{ {../media/} } 
+
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand\indep{\protect\mathpalette{\protect\independenT}{\perp}}
+\def\independenT#1#2{\mathrel{\rlap{$#1#2$}\mkern2mu{#1#2}}}
+
+\newenvironment{theorem}[2][Theorem]{\begin{trivlist}
+\item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
+\newenvironment{lemma}[2][Lemma]{\begin{trivlist}
+\item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
+\newenvironment{exercise}[2][Exercise]{\begin{trivlist}
+\item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
+\newenvironment{reflection}[2][Reflection]{\begin{trivlist}
+\item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
+\newenvironment{proposition}[2][Proposition]{\begin{trivlist}
+\item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
+\newenvironment{corollary}[2][Corollary]{\begin{trivlist}
+\item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
+ 
+\begin{document}
+ 
+% --------------------------------------------------------------
+%                         Start here
+% --------------------------------------------------------------
+ 
+%\renewcommand{\qedsymbol}{\filledbox}
+ 
+\title{mmmGan: Multi-Modal Matching with Generative Adversarial Networks}
+\author{Evangelos Ntavelis\\ %replace with your name
+r0692337\\
+} %if necessary, replace with your course title
+ 
+\maketitle
+
+\textbf{
+  \textit{Abstract--}Being fascinated by the recent Generative Adversarial Models and their success in many tasks as image creation, I decided to incorporate them in my thesis. My current pipeline
+consists of two pathways from one modality to the other. I want to create a system that
+1simultaneously trains on Image and Text data (e.g. MSCOCO) in order to generate outputs
+of one modality given the other. Each modality's input will be encoded in a representation
+vector which will be then decoded to an output of the other modality, and two discriminator
+networks will test the quality of the produced results. At the same time, we are going to use
+the decoder networks previously used on the inputs to create a vector representation of the
+produced outputs. This way we can also measure a reconstruction loss at the representation
+level. We aim to acquire meaningful representations which can then be used for other
+Information Retrieval and Language Understanding tasks.
+}
+\section{Introduction}
+
+There is evidence that the nature of human memory is reconstructive (Vernon 2014 \cite{ACS}; Hawkins and Blakeslee 2007\cite{onInt}). That means that our neural system breaks down the stimuli it receives from the outside world into an internal representation and it recreates it when the need arises. Moreover, Barsalou\cite{doi:10.1146/annurev.psych.59.103006.093639} argues that ground cognition draws upon the senses. It's normal, thus, to aim to computationally recreate this multi-modal decomposition, coding and composition procedure.
+
+In the previous years we can observe a lot of approaches tackling this problem using auto-encoders, both combining audio and visual features (Ngiam et al, 2011 \cite{conf/icml/NgiamKKNLN11}) and visual and text features (Silberer and Lapata 2014 \cite{silberer2014learning}). The encoders were fed with pre-learned features independently for both modalities, which were then combined \textit{a posteriori}. 
+
+More recently, a generative family of models, Generative Adversarial Networks, have gained popularity. Among other things, they were used as an alternative method to design multi-modal embeddings in video hyperlinking with promising results (Vukotic et al 2017).
+
+\section{Experimental Architectures}
+
+
+Following the example set by Peng et al 2017 \cite{DBLP:journals/corr/abs-1710-05106} and by Wang et al \cite{acmr}, who seem to follow a similar approach to utilize an adversarial setting \cite{2014arXiv1406.2661G} for \textit{Cross-Modal Representation Learning}, we aim to experiment with different configurations and building blocks.
+
+In both of the aforementioned articles we observe the usage of initial representations derived from a unimodal setting:
+
+\begin{itemize}
+  \item{Visual Embedding:} 4,096 dimension feature vector from the fc7 layer of a VGG-Net trained on ImageNet for both cases
+  \item{Word Embeddings:} 
+    \begin{itemize}
+      \item $n \times x$ matrix, with n the number of words and k the number of Word2Vec Features \cite{DBLP:journals/corr/MikolovSCCD13}
+      \item Bag of Words vector with TF-IDF weighting
+
+    \end{itemize}
+\end{itemize}
+
+They both use fully connected layers to arrive to a common representation and use discriminators inter-modally and intra-modally. Yet the approaches differ in their implementations and also the acmr method uses a label predictor as an additional discriminator network.
+
+I want to try two approaches. Firstly, following the above adversarial cross-modal paradigms, I want to try using the embeddings of pre-trained networks as input to these architectures. Alternatively, a more ambitious approach would be to try to train the networks while feeding them with raw image and sentences-describing-the-image data, for instance by using the MSCOCO dataset \cite{DBLP:journals/corr/LiuBK17}, and acquire the embeddings as a byproduct of the procedure. 
+
+In the first approach, the task we would train upon is information retrieval, both Bi-modal and All-modal. Specifically, we want to measure the cross-modal retrieval performance in terms of mAP on the tested datasets (e.g. Wikipedia, Pascal, MSCOCO etc.). In the later, the goal is to train networks simultaneously for $Image \rightarrow Text$ generation \cite{Karpathy:2017:DVA:3069214.3069250} and $Text \rightarrow Image$ \cite{DBLP:journals/corr/ReedAYLSL16} in an adversarial setting.
+
+I plan to experiment with architectures proposed for image to image transformations and apply them in a Cross-Modal setting. Namely Disco-GANs \cite{DBLP:journals/corr/KimCKLK17} and UNIT \cite{DBLP:journals/corr/LiuBK17} . Initially, the idea would be to imitate the abstract composition of the proposed architectures. For instance, UNIT proposes a combination of Variational Auto-Encoders with GANs, and it would be interesting to test if the usage of VAE instead of Convolutional Auto-Encoders (as proposed by Peng et al \cite{DBLP:journals/corr/abs-1710-05106}) would prove beneficial to our task. The DISCO-GANs paper proposes a coupling of transformations procedures that use generators that take as input an image from one domain and transform it to an other. Drawing upon this idea, we can use a similar architecture with $image \rightarrow text$ and $text \rightarrow image$ generators as building blocks.
+
+
+\section{Challenges}
+
+\begin{itemize}
+    \item GANs are computationally demanding to train 
+    \item Will need access to GPUs (I don't know if that's a given)
+\end{itemize}
+
+
+
+
+
+
+
+
+
+
+\bibliography{references}{}
+\bibliographystyle{ieeetr}
+
+\end{document}

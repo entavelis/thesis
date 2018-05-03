@@ -1,0 +1,71 @@
+\begin{thebibliography}{10}
+
+\bibitem{ACS}
+D.~Vernon, {\em Artificial Cognitive Systems: A primer}.
+\newblock MIT Press, 2014.
+
+\bibitem{onInt}
+J.~Hawkins and S.~Blakeslee, {\em On Intelligence}.
+\newblock Macmillan, 2007.
+
+\bibitem{doi:10.1146/annurev.psych.59.103006.093639}
+L.~W. Barsalou, ``Grounded cognition,'' {\em Annual Review of Psychology},
+  vol.~59, no.~1, pp.~617--645, 2008.
+\newblock PMID: 17705682.
+
+\bibitem{conf/icml/NgiamKKNLN11}
+J.~Ngiam, A.~Khosla, M.~Kim, J.~Nam, H.~Lee, and A.~Y. Ng, ``Multimodal deep
+  learning.,'' in {\em ICML} (L.~Getoor and T.~Scheffer, eds.), pp.~689--696,
+  Omnipress, 2011.
+
+\bibitem{silberer2014learning}
+C.~Silberer and M.~Lapata, ``Learning grounded meaning representations with
+  autoencoders,'' in {\em Proceedings of the 52nd Annual Meeting of the
+  Association for Computational Linguistics (Volume 1: Long Papers)},
+  (Baltimore, Maryland), pp.~721--732, Association for Computational
+  Linguistics, June 2014.
+
+\bibitem{collell}
+G.~Collell~Talleda, T.~Zhang, and M.-F. Moens, ``Imagined visual
+  representations as multimodal embeddings,'' {\em The Thirty-First AAAI
+  Conference on Artificial Intelligence (AAAI-17)}, pp.~4378--4384, 02 2017.
+
+\bibitem{DBLP:journals/corr/abs-1710-05106}
+Y.~Peng, J.~Qi, and Y.~Yuan, ``Cm-gans: Cross-modal generative adversarial
+  networks for common representation learning,'' {\em CoRR},
+  vol.~abs/1710.05106, 2017.
+
+\bibitem{acmr}
+B.~Wang, Y.~Yang, X.~Xu, A.~Hanjalic, and H.~Tao~Shen, ``Adversarial
+  cross-modal retrieval,'' {\em MM '17}, pp.~154--162, 10 2017.
+
+\bibitem{2014arXiv1406.2661G}
+I.~J. {Goodfellow}, J.~{Pouget-Abadie}, M.~{Mirza}, B.~{Xu}, D.~{Warde-Farley},
+  S.~{Ozair}, A.~{Courville}, and Y.~{Bengio}, ``{Generative Adversarial
+  Networks},'' {\em ArXiv e-prints}, June 2014.
+
+\bibitem{DBLP:journals/corr/MikolovSCCD13}
+T.~Mikolov, I.~Sutskever, K.~Chen, G.~Corrado, and J.~Dean, ``Distributed
+  representations of words and phrases and their compositionality,'' {\em
+  CoRR}, vol.~abs/1310.4546, 2013.
+
+\bibitem{DBLP:journals/corr/KimCKLK17}
+T.~Kim, M.~Cha, H.~Kim, J.~K. Lee, and J.~Kim, ``Learning to discover
+  cross-domain relations with generative adversarial networks,'' {\em CoRR},
+  vol.~abs/1703.05192, 2017.
+
+\bibitem{DBLP:journals/corr/LiuBK17}
+M.~Liu, T.~Breuel, and J.~Kautz, ``Unsupervised image-to-image translation
+  networks,'' {\em CoRR}, vol.~abs/1703.00848, 2017.
+
+\bibitem{Karpathy:2017:DVA:3069214.3069250}
+A.~Karpathy and L.~Fei-Fei, ``Deep visual-semantic alignments for generating
+  image descriptions,'' {\em IEEE Trans. Pattern Anal. Mach. Intell.}, vol.~39,
+  pp.~664--676, Apr. 2017.
+
+\bibitem{DBLP:journals/corr/ReedAYLSL16}
+S.~E. Reed, Z.~Akata, X.~Yan, L.~Logeswaran, B.~Schiele, and H.~Lee,
+  ``Generative adversarial text to image synthesis,'' {\em CoRR},
+  vol.~abs/1605.05396, 2016.
+
+\end{thebibliography}
