@@ -143,7 +143,6 @@ class TextEncoder(nn.Module):
 
         # (max_src_len, batch_size) => (max_src_len, batch_size, word_vec_size)
         emb = self.embedding(src_seqs)
-        print(emb)
 
         # packed_emb:
         # - data: (sum(batch_sizes), word_vec_size)
