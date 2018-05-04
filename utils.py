@@ -27,7 +27,7 @@ def as_np(data):
     return data.cpu().data.numpy()
 
 def pad_sequences(seqs):
-    seqs.sort(key=lambda x: len(x[0]), reverse=True)
+    seqs.sort(key=lambda x: len(x), reverse=True)
     lens = [len(seq) for seq in seqs]
     padded_seqs = torch.zeros(len(seqs), max(lens)).long()
     for i, seq in enumerate(seqs):
