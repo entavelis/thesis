@@ -37,9 +37,9 @@ def pad_sequences(seqs):
 
     padded_seqs.transpose(0, 1)
     print("\n\n")
-    print(padded_seqs)
+    print(str(padded_seqs))
     print("\n\n")
-    print(lens)
+    print(str(lens))
     print("\n\n")
     return padded_seqs, lens
 
