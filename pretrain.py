@@ -189,7 +189,7 @@ def main():
             # Set mini-batch dataset //ATTENTION CHECK TYPES DISCOGAN
             images = to_var(images, volatile=True)
             captions = to_var(captions)
-            captions = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+            target = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
             # Set training mode
             encoder_Txt.train()
