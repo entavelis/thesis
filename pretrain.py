@@ -212,6 +212,12 @@ def main():
             # if cuda:
             #     src_seqs = src_seqs.cuda()
 
+            print('\n')
+            print(str(captions).encode('utf-8'))
+            print('\n')
+            print(str(lengths).encode('utf-8'))
+            print('\n')
+
             Tz = encoder_Txt(captions, lengths)
             TzT = decoder_Txt(Tz, captions, lengths)
 
