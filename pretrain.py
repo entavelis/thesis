@@ -188,8 +188,8 @@ def main():
 
             # Set mini-batch dataset //ATTENTION CHECK TYPES DISCOGAN
             images = to_var(images, volatile=True)
-            # captions = to_var(captions)
-            targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+            captions = to_var(captions)
+            captions = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
             # Set training mode
             encoder_Txt.train()
@@ -208,16 +208,15 @@ def main():
 
             img_rc_loss = img_criterion(IzI,images)
 
-            src_seqs, src_lens = pad_sequences(captions)
 
-            if cuda:
-                src_seqs = src_seqs.cuda()
+            # if cuda:
+            #     src_seqs = src_seqs.cuda()
 
-            Tz = encoder_Txt(src_seqs, src_lens)
+            Tz = encoder_Txt(captions, lengths)
             TzT = decoder_Txt(Tz, captions, lengths)
 
 
-            txt_rc_loss = txt_criterion(TzT,targets)
+            txt_rc_loss = txt_criterion(TzT,captions)
             cm_loss = cm_criterion(Iz,Tz)
 
 
