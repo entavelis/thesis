@@ -36,6 +36,11 @@ def pad_sequences(seqs):
         padded_seqs[i, :end] = torch.LongTensor(seq[:end])
 
     padded_seqs.transpose(0, 1)
+    print("\n\n")
+    print(padded_seqs)
+    print("\n\n")
+    print(lens)
+    print("\n\n")
     return padded_seqs, lens
 
 def valid_params(params):
