@@ -2,6 +2,9 @@ import os
 import argparse
 from itertools import chain
 
+import onmt
+from onmt.modules import Embeddings
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -60,7 +63,7 @@ parser.add_argument('--save_step', type=int, default=1000,
 
 
 # Model parameters
-parser.add_argument('--embedding_size', type=int, default=100)
+parser.add_argument('--embedding_size', type=int, default=300)
 parser.add_argument('--hidden_size', type=int, default=300,
                     help='dimension of lstm hidden states')
 parser.add_argument('--num_layers', type=int, default=1,
@@ -115,12 +118,18 @@ def main():
     print("Loading Embeddings...")
     emb = load_glove_embeddings(emb_path, vocab.word2idx, emb_size)
 
-    glove_emb = nn.Embedding(emb.size(0), emb.size(1))
-    glove_emb.weight = nn.Parameter(emb)
+    glove_emb = Embeddings(emb_size,len(vocab.word2idx),vocab.word2idx["<pad>"])
+    glove_emb.word_lut.weight.data.copy_(emb)
+    glove_emb.word_lut.weight.requires_grad = False
+
+    # glove_emb = nn.Embedding(emb.size(0), emb.size(1))
+    # glove_emb = embedding(emb.size(0), emb.size(1))
+    # glove_emb.weight = nn.Parameter(emb)
+
 
     # Freeze weighs
-    if args.fixed_embeddings == "true":
-        glove_emb.weight.requires_grad = False
+    # if args.fixed_embeddings == "true":
+        # glove_emb.weight.requires_grad = False
 
     # Build data loader
     print("Building Data Loader...")
@@ -130,9 +139,10 @@ def main():
 
     print("Setting up the Networks...")
     #     generator_A = Generator()
-    encoder_Txt = TextEncoder(glove_emb, hidden_size=args.hidden_size)
+    encoder_Txt = TextEncoderOld(glove_emb, bidirectional=False, hidden_size=args.hidden_size)
     # decoder_Txt = TextDecoder(encoder_Txt, glove_emb)
-    decoder_Txt = DecoderRNN(glove_emb, hidden_size=args.hidden_size)
+    # decoder_Txt = DecoderRNN(glove_emb, hidden_size=args.hidden_size)
+    decoder_Txt = TextDecoderOld(glove_emb, hidden_size=args.hidden_size)
 
 
 
@@ -158,7 +168,8 @@ def main():
     # Losses and Optimizers
     print("Setting up the Objective Functions...")
     img_criterion = nn.MSELoss()
-    txt_criterion = nn.CrossEntropyLoss()
+    txt_criterion = nn.MSELoss()
+    # txt_criterion = nn.CrossEntropyLoss()
     cm_criterion = nn.MSELoss()
 
     #     gen_params = chain(generator_A.parameters(), generator_B.parameters())
@@ -189,53 +200,98 @@ def main():
             # Set mini-batch dataset //ATTENTION CHECK TYPES DISCOGAN
             images = to_var(images, volatile=True)
             captions = to_var(captions)
-            target = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+            # target = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+            # captions, lengths = pad_sequences(captions, lengths)
+
+            captions = captions.transpose(0,1).unsqueeze(2)
+            lengths = torch.LongTensor(lengths)            # print(captions.size())
 
             # Set training mode
-            encoder_Txt.train()
-            decoder_Txt.train()
+            encoder_Txt.encoder.train()
+            decoder_Txt.decoder.train()
 
-            #Forward, Backward and Optimize
+            # Forward, Backward and Optimize
             img_dec_optim.zero_grad()
             img_enc_optim.zero_grad()
 
             txt_dec_optim.zero_grad()
             txt_enc_optim.zero_grad()
 
+            # Image Auto_Encoder Forward
 
-            Iz = encoder_Img(images)
-            IzI = decoder_Img(Iz)
+            encoder_outputs, Iz  = encoder_Img(images)
+            IzI = decoder_Img(encoder_outputs)
 
             img_rc_loss = img_criterion(IzI,images)
 
+            print(encoder_outputs.volatile)
+            print(Iz.volatile)
+            print(IzI.volatile)
+            print(img_rc_loss.volatile)
+
+
+            # Text Auto Encoder Forward
 
             # if cuda:
             #     src_seqs = src_seqs.cuda()
+            # target = target[:-1] # exclude last target from inputs
+            dec_state = None
 
-            print('\n')
-            print(str(captions).encode('utf-8'))
-            print('\n')
-            print(str(lengths).encode('utf-8'))
-            print('\n')
-
-            Tz = encoder_Txt(captions, lengths)
-            TzT = decoder_Txt(Tz, captions, lengths)
+            encoder_outputs, memory_bank = encoder_Txt(captions, lengths)
+            enc_state = \
+                decoder_Txt.decoder.init_decoder_state(captions, memory_bank, encoder_outputs)
 
 
-            txt_rc_loss = txt_criterion(TzT,captions)
-            cm_loss = cm_criterion(Iz,Tz)
+            # print(captions.size())
+            # print(encoder_outputs.size())
 
+            decoder_outputs, dec_state, attns = \
+                decoder_Txt.decoder(captions,
+                             memory_bank,
+                             enc_state if dec_state is None
+                             else dec_state,
+                             memory_lengths=lengths)
+
+            Tz = encoder_outputs
+            TzT = decoder_outputs
+
+            print(encoder_outputs.volatile)
+            print(Tz.volatile)
+            print(TzT.volatile)
+
+            # print("Decoder Output" ,TzT.size())
+            # print("Captions: ",captions.size())
+
+            txt_rc_loss = 0
+
+            for x,y in zip(TzT.transpose(0,1),glove_emb(captions).transpose(0,1)):
+                txt_rc_loss = txt_criterion(x,y)
+
+            print(txt_rc_loss.volatile)
+
+            # Iz.requires_grad = False
+            Tz = Tz[0].detach()
+
+            # print("Iz,",Iz.size())
+            # print("Tz,",Tz.size())
+
+            cm_loss = cm_criterion(Iz, Tz)
+            print(cm_loss.volatile)
 
             rate = 0.9
             img_loss = img_rc_loss * (1 - rate) + cm_loss * rate
+            print(img_loss.volatile)
             txt_loss = txt_rc_loss * (1 - rate) + cm_loss * rate
+            print(txt_loss.volatile)
 
             # Half of the times we update one pipeline the others the other one
-            if i % 2 == 0:
+            if i % 2:
+                img_loss.no_grad()
                 img_loss.backward()
                 img_enc_optim.step()
                 img_dec_optim.step()
             else:
+                txt_loss.no_grad()
                 txt_loss.backward()
                 txt_enc_optim.step()
                 txt_dec_optim.step()

@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" serverName="vsc">
+  <component name="PublishConfigData" autoUpload="Always" serverName="Departmental Deployment">
     <serverData>
-      <paths name="vsc">
+      <paths name="Departmental Deployment">
         <serverdata>
           <mappings>
-            <mapping deploy="/user/leuven/323/vsc32350/thesis" local="$PROJECT_DIR$" web="/" />
-            <mapping local="" />
+            <mapping deploy="/home/thesis" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>
     </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
   </component>
 </project>

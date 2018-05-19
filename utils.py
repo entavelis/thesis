@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn as nn
 from torch.autograd import Variable
 
 #source: https://github.com/A-Jacobson/CNN_Sentence_Classification/blob/master/WordVectors.ipynb
@@ -26,9 +27,9 @@ def to_var(x, volatile=False):
 def as_np(data):
     return data.cpu().data.numpy()
 
-def pad_sequences(seqs):
+def pad_sequences(seqs,lens):
     seqs = sorted(seqs, key=lambda x: len(x), reverse=True)
-    lens = [len(seq) for seq in seqs]
+    # lens = [len(seq) for seq in seqs]
     padded_seqs = torch.zeros(len(seqs), max(lens)).long()
     for i, seq in enumerate(seqs):
         end = lens[i]
@@ -36,15 +37,34 @@ def pad_sequences(seqs):
         padded_seqs[i, :end] = torch.LongTensor(seq[:end])
 
     padded_seqs.transpose(0, 1)
-    print("\n\n")
-    print(len(padded_seqs))
-    print(str(padded_seqs).encode('utf-8'))
-    print("\n\n")
-    print(len(lens))
-    print(str(lens).encode('utf-8'))
-    print("\n\n")
+
     return padded_seqs, lens
 
 def valid_params(params):
     return [p for p in params if p.requires_grad]
+
+class embedding(nn.Embedding):
+
+
+    def __init__(self, num_embeddings, embedding_dim, padding_idx=None,
+                 max_norm=None, norm_type=2, scale_grad_by_freq=False,
+                 sparse=False, _weight=None):
+        super(embedding, self).__init__(num_embeddings, embedding_dim, padding_idx, max_norm,
+                 sparse, _weight)
+
+        self.embedding_size = embedding_dim
+
+# class embedding(object):
+#     def __init__(self, wrapped_class, *args, **kargs):
+#         self.wrapped_class = wrapped_class(*args, **kargs)
+#
+#     def __getattr__(self,attr):
+#         if attr=="embedding_size":
+#             return self.wrapped_class.__getattribute__("embedding_dim")
+#
+#         orig_attr =  self.wrapped_class.__getattribute__(attr)
+#         if callable(orig_attr):
+#             return orig_attr(*args, **kwargs)
+#         else:
+#             return orig_attr
 

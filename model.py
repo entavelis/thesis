@@ -16,102 +16,75 @@ paddings=[0,0,1]
 
 latent_dim = 300
 
-    
-# class TextEncoderOld(nn.Module):
-#     def __init__(
-#             self,
-#             embeddings
-#             ):
-#         super(TextEncoder, self).__init__()
-#
-#         self.hidden_dim = embedding_dim
-#
-#         rnn_type = "GRU"
-#         brnn = True
-#         enc_layers = 100
-#         rnn_size = latent_dim
-#         dropout = 0.3
-#         bridge = True
-#         self.encoder = Models.RNNEncoder(rnn_type, brnn, enc_layers,
-#                           rnn_size, dropout, embeddings,
-#                           bridge)
-#
-#     def forward(self, src, lengths):
-#
-#         # tgt = tgt[:-1]  # exclude last target from inputs
-#         return self.encoder(src, lengths)
-#
-# class TextDecoderOld(nn.Module):
-#     def __init__(
-#             self,
-#             embeddings
-#             ):
-#
-#         rnn_type = "GRU"
-#         brnn = True
-#         dec_layers =2
-#         rnn_size = latent_dim
-#         global_attention = True
-#         coverage_attn = True
-#         context_gate = True
-#         copy_attn = True
-#         dropout = 0.3
-#         reuse_copy_attn = True
-#
-#
-#         self.decoder = Models.StdRNNDecoder(rnn_type, brnn,
-#                              dec_layers, rnn_size,
-#                              global_attention,
-#                              coverage_attn,
-#                              context_gate,
-#                              copy_attn,
-#                              dropout,
-#                              embeddings,
-#                              reuse_copy_attn)
+class TextEncoderOld(nn.Module):
+    def __init__(
+            self,
+            embedding,
+            hidden_size = latent_dim,
+            num_layers = 1,
+            bidirectional = True,
+            bridge = False
+            ):
+        super(TextEncoderOld, self).__init__()
+
+        self.hidden_dim = hidden_size
+        self.num_layers = num_layers
+
+        self.embedding = embedding
+        self.enc_layers = self.embedding.embedding_size
+
+        rnn_type = "GRU"
+        brnn = bidirectional
+
+        rnn_size = self.hidden_dim
+        dropout = 0.3
+        self.encoder = Models.RNNEncoder(rnn_type, brnn, num_layers,
+                          rnn_size, dropout, embedding,
+                          bridge)
+
+    def forward(self, src, lengths):
+
+        # tgt = tgt[:-1]  # exclude last target from inputs
+        # src = src.transpose(0,1).unsqueeze(2)
+        # lengths = torch.LongTensor(lengths)
+        # print(len(lengths))
+        return self.encoder(src, lengths)
+
+class TextDecoderOld(nn.Module):
+    def __init__(
+            self,
+            embeddings,
+            layers = 1,
+            rnn_type="GRU",
+            hidden_size = latent_dim,
+            bidirectional = False
+            ):
+        super(TextDecoderOld,self).__init__()
+
+        global_attention = "general"
+        coverage_attn = False
+        context_gate = None
+        copy_attn = False
+        reuse_copy_attn = False
+        dropout = 0.3
 
 
-class DecoderRNN(nn.Module):
-    def __init__(self, embeds, hidden_size = 300 , num_layers=1):
-        """Set the hyper-parameters and build the layers."""
-        super(DecoderRNN, self).__init__()
-        self.embed = embeds
-        self.embed_size = self.embed.embedding_dim
-        self.lstm = nn.LSTM(self.embed_size, hidden_size, num_layers, batch_first=True)
-        self.linear = nn.Linear(hidden_size, self.embed_size)
-        self.init_weights()
+        self.decoder = Models.StdRNNDecoder(rnn_type, bidirectional,
+                             layers, hidden_size,
+                             global_attention,
+                             coverage_attn,
+                             context_gate,
+                             copy_attn,
+                             dropout,
+                             embeddings,
+                             reuse_copy_attn)
 
-    def init_weights(self):
-        """Initialize weights."""
-        # self.embed.weight.data.uniform_(-0.1, 0.1)
-        self.linear.weight.data.uniform_(-0.1, 0.1)
-        self.linear.bias.data.fill_(0)
-
-    def forward(self, features, captions, lengths):
-        """Decode image feature vectors and generates captions."""
-        embeddings = self.embed(captions)
-        embeddings = torch.cat((features.unsqueeze(1), embeddings), 1)
-        packed = pack_padded_sequence(embeddings, lengths, batch_first=True)
-        hiddens, _ = self.lstm(packed)
-        outputs = self.linear(hiddens[0])
-        return outputs
-
-    def sample(self, features, states=None):
-        """Samples captions for given image features (Greedy search)."""
-        sampled_ids = []
-        inputs = features.unsqueeze(1)
-        for i in range(20):                                      # maximum sampling length
-            hiddens, states = self.lstm(inputs, states)          # (batch_size, 1, hidden_size),
-            outputs = self.linear(hiddens.squeeze(1))            # (batch_size, vocab_size)
-            predicted = outputs.max(1)[1]
-            sampled_ids.append(predicted)
-            inputs = self.embed(predicted)
-            inputs = inputs.unsqueeze(1)                         # (batch_size, 1, embed_size)
-        sampled_ids = torch.cat(sampled_ids, 1)                  # (batch_size, 20)
-        return sampled_ids.squeeze()
+        def forward(self, *input, **kargs):
+            return self.decoder(*input, **kargs)
 
 #source: https://github.com/howardyclo/pytorch-seq2seq-example/blob/master/seq2seq.ipynb
 class TextEncoder(nn.Module):
-    def __init__(self, embedding=None, rnn_type='LSTM', hidden_size=300, num_layers=1, dropout=0.3, bidirectional=True):
+    def __init__(self, embedding=None, rnn_type='LSTM', hidden_size=latent_dim, num_layers=1, dropout=0.3, bidirectional=True):
         super(TextEncoder, self).__init__()
 
         self.num_layers = num_layers
@@ -144,10 +117,18 @@ class TextEncoder(nn.Module):
         # (max_src_len, batch_size) => (max_src_len, batch_size, word_vec_size)
         emb = self.embedding(src_seqs)
 
+        # print('\n')
+        # print(str(emb).Encode('utf-8'))
+        # print(emb.transpose(0,1).size(1))
+        # print('\n')
+        # print(str(len(src_lens)).encode('utf-8'))
+        # print(len(src_lens))
+        # print('\n')
+
         # packed_emb:
         # - data: (sum(batch_sizes), word_vec_size)
         # - batch_sizes: list of batch sizes
-        packed_emb = nn.utils.rnn.pack_padded_sequence(emb, src_lens)
+        packed_emb = nn.utils.rnn.pack_padded_sequence(emb, src_lens, batch_first=True)
 
         # rnn(gru) returns:
         # - packed_outputs: shape same as packed_emb
@@ -195,6 +176,50 @@ class TextEncoder(nn.Module):
             hidden = _cat(hidden)
 
         return hidden
+
+
+class DecoderRNN(nn.Module):
+    def __init__(self, embeds, hidden_size = latent_dim, num_layers=1):
+        """Set the hyper-parameters and build the layers."""
+        super(DecoderRNN, self).__init__()
+        self.embed = embeds
+        self.embed_size = self.embed.embedding_dim
+        self.lstm = nn.LSTM(self.embed_size, hidden_size, num_layers, batch_first=True)
+        self.linear = nn.Linear(hidden_size, self.embed_size)
+        self.init_weights()
+
+    def init_weights(self):
+        """Initialize weights."""
+        # self.embed.weight.data.uniform_(-0.1, 0.1)
+        self.linear.weight.data.uniform_(-0.1, 0.1)
+        self.linear.bias.data.fill_(0)
+
+    def forward(self, features, captions, lengths):
+        """Decode image feature vectors and generates captions."""
+        embeddings = self.embed(captions)
+        # print(str(embeddings).encode('utf-8'))
+        features = features.transpose(0,1)
+        print(features.size())
+        print(embeddings.size())
+        embeddings = torch.cat((features, embeddings), 1)
+        packed = pack_padded_sequence(embeddings, lengths, batch_first=True)
+        hiddens, _ = self.lstm(packed)
+        outputs = self.linear(hiddens[0])
+        return outputs
+
+    def sample(self, features, states=None):
+        """Samples captions for given image features (Greedy search)."""
+        sampled_ids = []
+        inputs = features.unsqueeze(1)
+        for i in range(20):                                      # maximum sampling length
+            hiddens, states = self.lstm(inputs, states)          # (batch_size, 1, hidden_size),
+            outputs = self.linear(hiddens.squeeze(1))            # (batch_size, vocab_size)
+            predicted = outputs.max(1)[1]
+            sampled_ids.append(predicted)
+            inputs = self.embed(predicted)
+            inputs = inputs.unsqueeze(1)                         # (batch_size, 1, embed_size)
+        sampled_ids = torch.cat(sampled_ids, 1)                  # (batch_size, 20)
+        return sampled_ids.squeeze()
 
 class TextDecoder(nn.Module):
         def __init__(self, encoder, embedding=None, bias=True, tie_embeddings=True, dropout=0.3):
@@ -290,6 +315,8 @@ class ImageEncoder(nn.Module):
 
         super(ImageEncoder, self).__init__()
 
+        self.feat_dim = feature_dimension
+
         if extra_layers == True:
             self.main = nn.Sequential(
                 nn.Conv2d(3, img_dimension, 4, 2, 1, bias=False),
@@ -306,6 +333,7 @@ class ImageEncoder(nn.Module):
                 nn.Conv2d(img_dimension * 8, feature_dimension, 4, 1, 0, bias=False),
                 nn.BatchNorm2d(feature_dimension),
                 nn.LeakyReLU(0.2, inplace=True),
+
             )
 
 
@@ -325,8 +353,14 @@ class ImageEncoder(nn.Module):
 
             )
 
+        self.fc = nn.Linear(feature_dimension * 11 * 11, latent_dim)
+
     def forward(self, input):
-        return self.main(input)
+        x = self.main(input)
+        x_cap = x.view(-1, self.feat_dim * 11 * 11)
+        x_cap = self.fc(x_cap)
+        return self.main(input), x_cap
+
 
 class ImageDecoder(nn.Module):
     def __init__(
