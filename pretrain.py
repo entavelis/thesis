@@ -25,6 +25,8 @@ from image_caption.data_loader import get_loader
 
 from pytorch_classification.utils import Bar, AverageMeter
 
+from sklearn.neighbors import NearestNeighbors
+
 
 
 # from progressbar import ETA, Bar, Percentage, ProgressBar
@@ -98,7 +100,7 @@ def main():
     else:
         cuda = False
 
-    # Image preprocessing
+    # Image preprocessing //ATTENTION
     # For normalization, see https://github.com/pytorch/vision#models
     transform = transforms.Compose([
         transforms.RandomCrop(args.crop_size),
@@ -144,11 +146,12 @@ def main():
         # glove_emb.weight.requires_grad = False
 
     # Build data loader
-    print("Building Data Loaders...")
+    print("Building Data Loader For Test Set...")
     data_loader = get_loader(args.image_dir, args.caption_path, vocab,
                              transform, args.batch_size,
                              shuffle=True, num_workers=args.num_workers)
 
+    print("Building Data Loader For Validation Set...")
     val_loader = get_loader(args.valid_dir, args.valid_caption_path, vocab,
                              transform, args.batch_size,
                              shuffle=True, num_workers=args.num_workers)
@@ -232,7 +235,7 @@ def main():
 
 
         for i, (images, captions, lengths) in enumerate(data_loader):
-            break
+
             # Set mini-batch dataset
             images = to_var(images)
             captions = to_var(captions)
@@ -375,35 +378,95 @@ def main():
         encoder_Img.eval()
 
         encoder_Txt.encoder.eval()
-        # get pairs
 
-        result_embeddings = torch.FloatTensor()
+        # get pairs
+        end = time.time()
+
+        bar = Bar('Computing Validation Set Embeddings', max=len(val_loader))
+
         for i, (images, captions, lengths) in enumerate(val_loader):
 
             # Set mini-batch dataset
             images = to_var(images)
-            # captions = to_var(captions)
+            captions = to_var(captions)
 
-            # captions = captions.transpose(0,1).unsqueeze(2)
-            # lengths = torch.LongTensor(lengths)
+            captions = captions.transpose(0,1).unsqueeze(2)
+            lengths = torch.LongTensor(lengths)
 
             _, img_emb = encoder_Img(images)
 
-            # txt_emb, _ = encoder_Txt(captions, lengths)
+            txt_emb, _ = encoder_Txt(captions, lengths)
+
 
             # current_embeddings = torch.cat( \
             #         (txt_emb.transpose(0,1).data,img_emb.unsqueeze(1).data)
             #         , 1)
+            current_embeddings = np.concatenate( \
+                (txt_emb.cpu().data.numpy(),\
+                 img_emb.unsqueeze(0).cpu().data.numpy())\
+                ,0)
 
-            current_embeddings = img_emb.data
+            # current_embeddings = img_emb.data
             if i:
-                result_embeddings = torch.cat( \
+                # result_embeddings = torch.cat( \
+                result_embeddings = np.concatenate( \
                     (result_embeddings, current_embeddings) \
-                    ,0)
+                    ,1)
             else:
                 result_embeddings = current_embeddings
 
-            print(result_embeddings.size())
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+            # plot progress
+            bar.suffix = '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:}'.format(
+                        batch=i,
+                        size=len(data_loader),
+                        bt=batch_time.avg,
+                        total=bar.elapsed_td,
+                        eta=bar.eta_td,
+                        )
+            bar.next()
+        bar.finish()
+
+        end = time.time()
+
+        print("Computing Nearest Neighbors")
+        neigh = NearestNeighbors(5)
+        neigh.fit(result_embeddings[1])
+        kneigh = neigh.kneighbors(result_embeddings[0], return_distance=False)
+
+        bar = Bar('Computing top-K Accuracy', max=len(val_loader))
+
+        top5 = AverageMeter()
+        for i in range(result_embeddings.shape[1]):
+            i_emb = result_embeddings[1][i]
+            if i_emb in kneigh[i]:
+                top5.update(1.)
+            else:
+                top5.update(0.)
+
+            if not (i+1) % args.batch_size:
+                # measure elapsed time
+                batch_time.update(time.time() - end)
+                end = time.time()
+
+                # plot progress
+                bar.suffix = '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Top-5 Acc {tp5:.3f}'.format(
+                            batch= (i+1)/args.batch_size,
+                            size=len(result_embeddings)/args.batch_size,
+                            bt=batch_time.avg,
+                            total=bar.elapsed_td,
+                            eta=bar.eta_td,
+                            tp5=top5.avg
+                            )
+                bar.next()
+        bar.finish()
+
+
+
+
 
 
 
