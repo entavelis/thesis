@@ -1,4 +1,6 @@
 import os
+import time
+
 import argparse
 from itertools import chain
 
@@ -21,9 +23,11 @@ from utils import *
 from image_caption.build_vocab import Vocabulary
 from image_caption.data_loader import get_loader
 
+from pytorch_classification.utils import Bar, AverageMeter
 
 
-from progressbar import ETA, Bar, Percentage, ProgressBar
+
+# from progressbar import ETA, Bar, Percentage, ProgressBar
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--cuda', type=str, default='true', help='Set cuda usage')
@@ -43,12 +47,14 @@ parser.add_argument('--model_save_interval', type=int, default=10000,
 parser.add_argument('--model_path', type=str, default='./models/',
                     help='path for saving trained models')
 
-parser.add_argument('--crop_size', type=int, default=224,
+parser.add_argument('--crop_size', type=int, default=128, #224
                     help='size for randomly cropping images')
 parser.add_argument('--vocab_path', type=str, default='./data/vocab.pkl',
                     help='path for vocabulary wrapper')
 parser.add_argument('--image_dir', type=str, default='./data/resized2014',
                     help='directory for resized images')
+parser.add_argument('--valid_dir', type=str, default='./data/val_resized2014',
+                    help='directory for resized validation set images')
 
 parser.add_argument('--embedding_path', type=str,
                     default='./glove/',
@@ -56,6 +62,9 @@ parser.add_argument('--embedding_path', type=str,
 parser.add_argument('--caption_path', type=str,
                     default='./data/annotations/captions_train2014.json',
                     help='path for train annotation json file')
+parser.add_argument('--valid_caption_path', type=str,
+                    default='./data/annotations/captions_val2014.json',
+                    help='path for valid annotation json file')
 parser.add_argument('--log_step', type=int, default=10,
                     help='step size for prining log info')
 parser.add_argument('--save_step', type=int, default=1000,
@@ -71,14 +80,17 @@ parser.add_argument('--num_layers', type=int, default=1,
 
 parser.add_argument('--extra_layers', type=str, default='true')
 parser.add_argument('--fixed_embeddings', type=str, default="true")
-parser.add_argument('--num_epochs', type=int, default=5)
+parser.add_argument('--num_epochs', type=int, default=100)
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--num_workers', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.001)
 
+parser.add_argument('--criterion', type=str, default='Cosine')
 def main():
     # global args
     args = parser.parse_args()
+
+    assert args.criterion in ("L1","Cosine","Hinge"), 'Invalid Loss Function'
 
     cuda = args.cuda
     if cuda == 'true':
@@ -132,8 +144,12 @@ def main():
         # glove_emb.weight.requires_grad = False
 
     # Build data loader
-    print("Building Data Loader...")
+    print("Building Data Loaders...")
     data_loader = get_loader(args.image_dir, args.caption_path, vocab,
+                             transform, args.batch_size,
+                             shuffle=True, num_workers=args.num_workers)
+
+    val_loader = get_loader(args.valid_dir, args.valid_caption_path, vocab,
                              transform, args.batch_size,
                              shuffle=True, num_workers=args.num_workers)
 
@@ -147,8 +163,8 @@ def main():
 
 
     #     generator_B = Generator()
-    encoder_Img = ImageEncoder(feature_dimension= args.hidden_size, extra_layers= (args.extra_layers == 'true'))
-    decoder_Img = ImageDecoder(feature_dimension= args.hidden_size, extra_layers= (args.extra_layers == 'true'))
+    encoder_Img = ImageEncoder(img_dimension=args.crop_size,feature_dimension= args.hidden_size)
+    decoder_Img = ImageDecoder(img_dimension=args.crop_size, feature_dimension= args.hidden_size)
 
     if cuda:
         # test_I = test_I.cuda()
@@ -168,9 +184,19 @@ def main():
     # Losses and Optimizers
     print("Setting up the Objective Functions...")
     img_criterion = nn.MSELoss()
-    txt_criterion = nn.MSELoss()
+    # txt_criterion = nn.MSELoss(size_average=True)
+    if args.criterion == 'L1':
+        txt_criterion = nn.L1Loss()
+        cm_criterion = nn.L1Loss()
+    elif args.criterion == "Cosine":
+        txt_criterion = nn.CosineEmbeddingLoss()
+        cm_criterion = nn.CosineEmbeddingLoss()
+    else:
+        txt_criterion = nn.HingeEmbeddingLoss()
+        cm_criterion = nn.HingeEmbeddingLoss()
+
+
     # txt_criterion = nn.CrossEntropyLoss()
-    cm_criterion = nn.MSELoss()
 
     #     gen_params = chain(generator_A.parameters(), generator_B.parameters())
     print("Setting up the Optimizers...")
@@ -185,30 +211,39 @@ def main():
     txt_dec_optim = optim.Adam(valid_params(decoder_Txt.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
 
 
-    total_step = len(data_loader)
     for epoch in range(args.num_epochs):
-        #         We don't want our data to be shuffled
-        #         data_style_A, data_style_B = shuffle_data( data_style_A, data_style_B)
 
-        widgets = ['epoch #%d|' % epoch, Percentage(), Bar(), ETA()]
-        pbar = ProgressBar(maxval=total_step, widgets=widgets)
-        pbar.start()
+        # TRAINING TIME
+        print('EPOCH ::: TRAINING ::: ' + str(epoch + 1))
+        batch_time = AverageMeter()
+        txt_losses = AverageMeter()
+        img_losses = AverageMeter()
+        cm_losses = AverageMeter()
+        end = time.time()
+
+        bar = Bar('Training Net', max=len(data_loader))
+
+        # Set training mode
+        encoder_Img.train()
+        decoder_Img.train()
+
+        encoder_Txt.encoder.train()
+        decoder_Txt.decoder.train()
+
 
         for i, (images, captions, lengths) in enumerate(data_loader):
-            pbar.update(i)
-
-            # Set mini-batch dataset //ATTENTION CHECK TYPES DISCOGAN
-            images = to_var(images, volatile=True)
+            break
+            # Set mini-batch dataset
+            images = to_var(images)
             captions = to_var(captions)
+
             # target = pack_padded_sequence(captions, lengths, batch_first=True)[0]
             # captions, lengths = pad_sequences(captions, lengths)
+            # images = torch.FloatTensor(images)
 
             captions = captions.transpose(0,1).unsqueeze(2)
             lengths = torch.LongTensor(lengths)            # print(captions.size())
 
-            # Set training mode
-            encoder_Txt.encoder.train()
-            decoder_Txt.decoder.train()
 
             # Forward, Backward and Optimize
             img_dec_optim.zero_grad()
@@ -224,11 +259,6 @@ def main():
 
             img_rc_loss = img_criterion(IzI,images)
 
-            print(encoder_outputs.volatile)
-            print(Iz.volatile)
-            print(IzI.volatile)
-            print(img_rc_loss.volatile)
-
 
             # Text Auto Encoder Forward
 
@@ -242,8 +272,6 @@ def main():
                 decoder_Txt.decoder.init_decoder_state(captions, memory_bank, encoder_outputs)
 
 
-            # print(captions.size())
-            # print(encoder_outputs.size())
 
             decoder_outputs, dec_state, attns = \
                 decoder_Txt.decoder(captions,
@@ -255,52 +283,57 @@ def main():
             Tz = encoder_outputs
             TzT = decoder_outputs
 
-            print(encoder_outputs.volatile)
-            print(Tz.volatile)
-            print(TzT.volatile)
 
             # print("Decoder Output" ,TzT.size())
-            # print("Captions: ",captions.size())
+            # print("Captions: ",glove_emb(captions).size())
 
             txt_rc_loss = 0
 
             for x,y in zip(TzT.transpose(0,1),glove_emb(captions).transpose(0,1)):
-                txt_rc_loss = txt_criterion(x,y)
+                if args.criterion == 'L1':
+                    txt_rc_loss += txt_criterion(x,y)
+                else:
+                    txt_rc_loss = txt_criterion(x, y, Variable(torch.ones(x.size(0))).cuda())
 
-            print(txt_rc_loss.volatile)
+            txt_rc_loss /= TzT.size(0)
+
 
             # Iz.requires_grad = False
             Tz = Tz[0].detach()
 
-            # print("Iz,",Iz.size())
-            # print("Tz,",Tz.size())
 
-            cm_loss = cm_criterion(Iz, Tz)
-            print(cm_loss.volatile)
+            if args.criterion == 'L1':
+                cm_loss = cm_criterion(Iz, Tz)
+            else:
+                cm_loss = cm_criterion(Iz, Tz, Variable(torch.ones(args.batch_size)).cuda())
 
-            rate = 0.9
-            img_loss = img_rc_loss * (1 - rate) + cm_loss * rate
-            print(img_loss.volatile)
-            txt_loss = txt_rc_loss * (1 - rate) + cm_loss * rate
-            print(txt_loss.volatile)
+
+            # rate = 0.5
+            # img_loss = img_rc_loss * (1 - rate) + cm_loss * rate
+            # txt_loss = txt_rc_loss * (1 - rate) + cm_loss * rate
+            img_loss = img_rc_loss + cm_loss
+            txt_loss = txt_rc_loss + cm_loss
+
+
+            img_losses.update(img_rc_loss.data[0],args.batch_size)
+            txt_losses.update(txt_rc_loss.data[0],args.batch_size)
+            cm_losses.update(cm_loss.data[0], args.batch_size)
 
             # Half of the times we update one pipeline the others the other one
-            if i % 2:
-                img_loss.no_grad()
+            if not i % 2:
                 img_loss.backward()
                 img_enc_optim.step()
                 img_dec_optim.step()
             else:
-                txt_loss.no_grad()
                 txt_loss.backward()
                 txt_enc_optim.step()
                 txt_dec_optim.step()
-
-            if i % args.log_interval == 0:
-                print("---------------------")
-                print("Img Loss: " + as_np(img_rc_loss.mean()))
-                print("Txt Loss: " + as_np(img_rc_loss.mean()))
-                print("Cross-Modal Loss: " + as_np(cm_loss.mean()))
+            #
+            # if (i+1) % args.log_interval == 0:
+            #     print("---------------------")
+            #     print("Img Loss: " + img_loss.avg)
+            #     print("Txt Loss: " + txt_loss.avg)
+            #     print("Cross-Modal Loss: " + cm_loss.avg)
 
             # Save the models
             if (i+1) % args.save_step == 0:
@@ -316,6 +349,65 @@ def main():
                 torch.save(encoder_Txt.state_dict(),
                            os.path.join(args.model_path,
                                         'encoder-txt-%d-%d.pkl' %(epoch+1, i+1)))
+
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+            # plot progress
+            bar.suffix = '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss_Img: {img_l:.3f}| Loss_Txt: {txt_l:.3f} | Loss_CM: {cm_l:.3f}'.format(
+                        batch=i,
+                        size=len(data_loader),
+                        bt=batch_time.avg,
+                        total=bar.elapsed_td,
+                        eta=bar.eta_td,
+                        img_l=img_losses.avg,
+                        txt_l=txt_losses.avg,
+                        cm_l=cm_losses.avg,
+                        )
+            bar.next()
+        bar.finish()
+
+        # VALIDATION TIME
+        print('EPOCH ::: VALIDATION ::: ' + str(epoch + 1))
+
+        # Set Evaluation Mode
+        encoder_Img.eval()
+
+        encoder_Txt.encoder.eval()
+        # get pairs
+
+        result_embeddings = torch.FloatTensor()
+        for i, (images, captions, lengths) in enumerate(val_loader):
+
+            # Set mini-batch dataset
+            images = to_var(images)
+            # captions = to_var(captions)
+
+            # captions = captions.transpose(0,1).unsqueeze(2)
+            # lengths = torch.LongTensor(lengths)
+
+            _, img_emb = encoder_Img(images)
+
+            # txt_emb, _ = encoder_Txt(captions, lengths)
+
+            # current_embeddings = torch.cat( \
+            #         (txt_emb.transpose(0,1).data,img_emb.unsqueeze(1).data)
+            #         , 1)
+
+            current_embeddings = img_emb.data
+            if i:
+                result_embeddings = torch.cat( \
+                    (result_embeddings, current_embeddings) \
+                    ,0)
+            else:
+                result_embeddings = current_embeddings
+
+            print(result_embeddings.size())
+
+
+
+
 
 
 if __name__ == "__main__":
