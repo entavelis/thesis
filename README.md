@@ -2,21 +2,25 @@
 
 ![](abstract/media/mmmGanwide.png)
 
-I am going to use the README as a tracker of Goals per Week,
 
-__Goals:__
+__TO DO:__
 
-- Train the [_pre_training_ paired autoencoder network](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf)
-- Test it on a Cross Modal Retrieval Task
-    - Measure mAP 
-    - Measure Top-k Error Rate
+[Coupled Auto-Encoder Network](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf):
+
+- Try masking common embedding: 
+    - degree of masking
+- Try different embedding errors: 
+    - CosineEmbLoss
+    - HingeEmbLoss
+- Try propagate errors differently:
+    - Chain Encoder-Decoder
+    - Propagate only reconstruction error at decoders
+- Use 256x256 image sizes instead of 128x128
+- Randomly crop images for normalization
+    
 
 ![](abstract/media/pretraining.png)
-### Questions
 
-### Notes
-
-- Check the loss functions used in [Show, Adapt and Tell](https://github.com/tsenghungchen/show-adapt-and-tell#mscoco-captioning-dataset)
 
 ### Based on:
 

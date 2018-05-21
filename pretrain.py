@@ -88,6 +88,9 @@ parser.add_argument('--num_workers', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.001)
 
 parser.add_argument('--criterion', type=str, default='Cosine')
+
+parser.add_argument('--common_emb_size', type=str, default = 200)
+
 def main():
     # global args
     args = parser.parse_args()
@@ -189,13 +192,13 @@ def main():
     img_criterion = nn.MSELoss()
     # txt_criterion = nn.MSELoss(size_average=True)
     if args.criterion == 'L1':
-        txt_criterion = nn.L1Loss()
+        txt_criterion = nn.L1Loss(size_average=False)
         cm_criterion = nn.L1Loss()
     elif args.criterion == "Cosine":
-        txt_criterion = nn.CosineEmbeddingLoss()
+        txt_criterion = nn.CosineEmbeddingLoss(size_average=False)
         cm_criterion = nn.CosineEmbeddingLoss()
     else:
-        txt_criterion = nn.HingeEmbeddingLoss()
+        txt_criterion = nn.HingeEmbeddingLoss(size_average=False)
         cm_criterion = nn.HingeEmbeddingLoss()
 
 
@@ -204,14 +207,16 @@ def main():
     #     gen_params = chain(generator_A.parameters(), generator_B.parameters())
     print("Setting up the Optimizers...")
     # img_params = chain(decoder_Img.parameters(), encoder_Img.parameters())
-    # txt_params = chain(decoder_Txt.parameters(), encoder_Txt.parameters())
+    # txt_params = chain(decoder_Txt.decoder.parameters(), encoder_Txt.encoder.parameters())
 
     # ATTENTION: Check betas and weight decay
     # ATTENTION: Check why valid_params fails on image networks with out of memory error
+    # img_optim = optim.Adam(img_params, lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
+    # txt_optim = optim.Adam(valid_params(txt_params), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
     img_enc_optim = optim.Adam(encoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
     img_dec_optim = optim.Adam(decoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
-    txt_enc_optim = optim.Adam(valid_params(encoder_Txt.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
-    txt_dec_optim = optim.Adam(valid_params(decoder_Txt.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
+    txt_enc_optim = optim.Adam(valid_params(encoder_Txt.encoder.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
+    txt_dec_optim = optim.Adam(valid_params(decoder_Txt.decoder.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
 
 
     for epoch in range(args.num_epochs):
@@ -235,6 +240,9 @@ def main():
 
 
         for i, (images, captions, lengths) in enumerate(data_loader):
+            # ATTENTION REMOVE
+            if i == 6450:
+                break
 
             # Set mini-batch dataset
             images = to_var(images)
@@ -249,9 +257,11 @@ def main():
 
 
             # Forward, Backward and Optimize
+            # img_optim.zero_grad()
             img_dec_optim.zero_grad()
             img_enc_optim.zero_grad()
 
+            # txt_params.zero_grad()
             txt_dec_optim.zero_grad()
             txt_enc_optim.zero_grad()
 
@@ -292,11 +302,12 @@ def main():
 
             txt_rc_loss = 0
 
-            for x,y in zip(TzT.transpose(0,1),glove_emb(captions).transpose(0,1)):
+            for x,y,l in zip(TzT.transpose(0,1),glove_emb(captions).transpose(0,1),lengths):
                 if args.criterion == 'L1':
-                    txt_rc_loss += txt_criterion(x,y)
+                    txt_rc_loss += txt_criterion(x,y)/l
                 else:
-                    txt_rc_loss = txt_criterion(x, y, Variable(torch.ones(x.size(0))).cuda())
+                    # ATTENTION Fails on last batch
+                    txt_rc_loss = txt_criterion(x, y, Variable(torch.ones(x.size(0))).cuda())/l
 
             txt_rc_loss /= TzT.size(0)
 
@@ -308,7 +319,7 @@ def main():
             if args.criterion == 'L1':
                 cm_loss = cm_criterion(Iz, Tz)
             else:
-                cm_loss = cm_criterion(Iz, Tz, Variable(torch.ones(args.batch_size)).cuda())
+                cm_loss = cm_criterion(Iz, Tz, Variable(torch.ones(Iz.size(0))).cuda())
 
 
             # rate = 0.5
@@ -325,18 +336,14 @@ def main():
             # Half of the times we update one pipeline the others the other one
             if not i % 2:
                 img_loss.backward()
-                img_enc_optim.step()
+                # img_optim.step()
                 img_dec_optim.step()
+                img_enc_optim.step()
             else:
                 txt_loss.backward()
-                txt_enc_optim.step()
+                # txt_optim.step()
                 txt_dec_optim.step()
-            #
-            # if (i+1) % args.log_interval == 0:
-            #     print("---------------------")
-            #     print("Img Loss: " + img_loss.avg)
-            #     print("Txt Loss: " + txt_loss.avg)
-            #     print("Cross-Modal Loss: " + cm_loss.avg)
+                txt_enc_optim.step()
 
             # Save the models
             if (i+1) % args.save_step == 0:
@@ -422,7 +429,7 @@ def main():
             # plot progress
             bar.suffix = '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:}'.format(
                         batch=i,
-                        size=len(data_loader),
+                        size=len(val_loader),
                         bt=batch_time.avg,
                         total=bar.elapsed_td,
                         eta=bar.eta_td,
@@ -432,37 +439,13 @@ def main():
 
         end = time.time()
 
-        print("Computing Nearest Neighbors")
+        print("Computing Nearest Neighbors...")
         neigh = NearestNeighbors(5)
         neigh.fit(result_embeddings[1])
         kneigh = neigh.kneighbors(result_embeddings[0], return_distance=False)
+        top5 = np.mean([i in nn for i,nn in enumerate(kneigh)])
 
-        bar = Bar('Computing top-K Accuracy', max=len(val_loader))
-
-        top5 = AverageMeter()
-        for i in range(result_embeddings.shape[1]):
-            i_emb = result_embeddings[1][i]
-            if i_emb in kneigh[i]:
-                top5.update(1.)
-            else:
-                top5.update(0.)
-
-            if not (i+1) % args.batch_size:
-                # measure elapsed time
-                batch_time.update(time.time() - end)
-                end = time.time()
-
-                # plot progress
-                bar.suffix = '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Top-5 Acc {tp5:.3f}'.format(
-                            batch= (i+1)/args.batch_size,
-                            size=len(result_embeddings)/args.batch_size,
-                            bt=batch_time.avg,
-                            total=bar.elapsed_td,
-                            eta=bar.eta_td,
-                            tp5=top5.avg
-                            )
-                bar.next()
-        bar.finish()
+        print("Top-5 accuracy for Image Retrieval: ",top5)
 
 
 
