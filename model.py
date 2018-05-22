@@ -54,7 +54,7 @@ class TextDecoderOld(nn.Module):
     def __init__(
             self,
             embeddings,
-            layers = 1,
+            num_layers = 1,
             rnn_type="GRU",
             hidden_size = latent_dim,
             bidirectional = False
@@ -70,7 +70,7 @@ class TextDecoderOld(nn.Module):
 
 
         self.decoder = Models.StdRNNDecoder(rnn_type, bidirectional,
-                             layers, hidden_size,
+                             num_layers, hidden_size,
                              global_attention,
                              coverage_attn,
                              context_gate,

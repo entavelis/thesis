@@ -6,7 +6,7 @@
 __TO DO:__
 
 [Coupled Auto-Encoder Network](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf):
-
+- Do the _Karpathy Split_
 - Try masking common embedding: 
     - degree of masking
 - Try different embedding errors: 
@@ -17,6 +17,9 @@ __TO DO:__
     - Propagate only reconstruction error at decoders
 - Use 256x256 image sizes instead of 128x128
 - Randomly crop images for normalization
+- Train first one and then the other
+- Train only the encoders on some steps
+- Try Variational AE
     
 
 ![](abstract/media/pretraining.png)
