@@ -19,7 +19,9 @@ __TO DO:__
 - Randomly crop images for normalization
 - Train first one and then the other
 - Train only the encoders on some steps
-- Try Variational AE
+- Try Variational AE:
+    - how wide range -> sigma
+    - 
     
 
 ![](abstract/media/pretraining.png)

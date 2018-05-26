@@ -87,7 +87,7 @@ parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--num_workers', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.001)
 
-parser.add_argument('--criterion', type=str, default='MSE')
+parser.add_argument('--criterion', type=str, default='Cosine')
 
 parser.add_argument('--common_emb_size', type=str, default = 200)
 
@@ -96,9 +96,6 @@ def main():
     args = parser.parse_args()
 
     assert args.criterion in ("MSE","Cosine","Hinge"), 'Invalid Loss Function'
-
-    mask = args.common_emb_size
-    assert mask <= args.hidden_size
 
     cuda = args.cuda
     if cuda == 'true':
@@ -125,7 +122,8 @@ def main():
 
 
     # Load vocabulary wrapper.
-    print("Loading Vocabulary...")
+    print('\n')
+    print("\033[94mLoading Vocabulary...")
     with open(args.vocab_path, 'rb') as f:
         vocab = pickle.load(f)
 
@@ -160,7 +158,7 @@ def main():
     print("Building Data Loader For Validation Set...")
     val_loader = get_loader(args.valid_dir, args.valid_caption_path, vocab,
                              transform, args.batch_size,
-                             shuffle=True, num_workers=args.num_workers)
+                             shuffle=False, num_workers=args.num_workers)
 
     print("Setting up the Networks...")
     encoder_Txt = TextEncoderOld(glove_emb, num_layers=1, bidirectional=False, hidden_size=args.hidden_size)
@@ -185,7 +183,7 @@ def main():
     img_criterion = nn.MSELoss()
     # txt_criterion = nn.MSELoss(size_average=True)
     if args.criterion == 'MSE':
-        txt_criterion = nn.MSELoss(size_average=False)
+        txt_criterion = nn.MSELoss()
         cm_criterion = nn.MSELoss()
     elif args.criterion == "Cosine":
         txt_criterion = nn.CosineEmbeddingLoss(size_average=False)
@@ -195,10 +193,6 @@ def main():
         cm_criterion = nn.HingeEmbeddingLoss()
 
 
-    if cuda:
-        img_criterion = img_criterion.cuda()
-        txt_criterion = txt_criterion.cuda()
-        cm_criterion = cm_criterion.cuda()
     # txt_criterion = nn.CrossEntropyLoss()
 
     #     gen_params = chain(generator_A.parameters(), generator_B.parameters())
@@ -219,257 +213,97 @@ def main():
     # txt_dec_optim = optim.Adam(valid_params(decoder_Txt.decoder.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
 
 
-    train_images = True
     for epoch in range(args.num_epochs):
 
-        # TRAINING TIME
-        print('EPOCH ::: TRAINING ::: ' + str(epoch + 1))
+
+        # VALIDATION TIME
+        print('\033[92mEPOCH ::: VALIDATION ::: ' + str(epoch + 1))
+
+        # Load the models
+        print("Loading the models...")
+        try:
+            encoder_Img.load_state_dict(torch.load(os.path.join(args.model_path,
+                                    'encoder-img-%d.pkl' %(epoch+1))))
+            encoder_Txt.load_state_dict(torch.load(os.path.join(args.model_path,
+                                    'encoder-txt-%d.pkl' %(epoch+1))))
+        except FileNotFoundError:
+            print("\n\033[91mFile not found...\nTerminating Validation Procedure!")
+            break
+
+        # Set Evaluation Mode
+        encoder_Img.eval()
+
+        encoder_Txt.encoder.eval()
+
         batch_time = AverageMeter()
-        txt_losses = AverageMeter()
-        img_losses = AverageMeter()
-        cm_losses = AverageMeter()
         end = time.time()
 
-        bar = Bar('Training Net', max=len(data_loader))
+        bar = Bar('Computing Validation Set Embeddings', max=len(val_loader))
 
-        # Set training mode
-        encoder_Img.train()
-        decoder_Img.train()
-
-        encoder_Txt.encoder.train()
-        decoder_Txt.decoder.train()
-
-
-        train_images = not train_images
-        for i, (images, captions, lengths) in enumerate(data_loader):
-            # ATTENTION REMOVE
-            if i == 6450:
+        for i, (images, captions, lengths) in enumerate(val_loader):
+            if i == 2:
                 break
 
             # Set mini-batch dataset
             images = to_var(images)
             captions = to_var(captions)
 
-            # target = pack_padded_sequence(captions, lengths, batch_first=True)[0]
-            # captions, lengths = pad_sequences(captions, lengths)
-            # images = torch.FloatTensor(images)
-
             captions = captions.transpose(0,1).unsqueeze(2)
-            lengths = torch.LongTensor(lengths)            # print(captions.size())
+            lengths = torch.LongTensor(lengths)
 
+            _, img_emb = encoder_Img(images)
 
-            # Forward, Backward and Optimize
-            # img_optim.zero_grad()
-            # img_dec_optim.zero_grad()
-            # img_enc_optim.zero_grad()
-            encoder_Img.zero_grad()
-            decoder_Img.zero_grad()
+            txt_emb, _ = encoder_Txt(captions, lengths)
 
-            # txt_params.zero_grad()
-            # txt_dec_optim.zero_grad()
-            # txt_enc_optim.zero_grad()
-            encoder_Txt.encoder.zero_grad()
-            decoder_Txt.decoder.zero_grad()
+            img_emb = img_emb.narrow(1,0,200)
+            txt_emb = txt_emb.narrow(2,0,200)
+            # current_embeddings = torch.cat( \
+            #         (txt_emb.transpose(0,1).data,img_emb.unsqueeze(1).data)
+            #         , 1)
+            current_embeddings = np.concatenate( \
+                (txt_emb.cpu().data.numpy(),\
+                 img_emb.unsqueeze(0).cpu().data.numpy())\
+                ,0)
 
-            # Image Auto_Encoder Forward
-
-            img_encoder_outputs, Iz  = encoder_Img(images)
-
-            IzI = decoder_Img(img_encoder_outputs)
-
-            img_rc_loss = img_criterion(IzI,images)
-
-
-            # Text Auto Encoder Forward
-
-            # target = target[:-1] # exclude last target from inputs
-
-            captions = captions[:-1,:,:]
-            lengths = lengths - 1
-            dec_state = None
-
-            encoder_outputs, memory_bank = encoder_Txt(captions, lengths)
-
-            enc_state = \
-                decoder_Txt.decoder.init_decoder_state(captions, memory_bank, encoder_outputs)
-
-            decoder_outputs, dec_state, attns = \
-                decoder_Txt.decoder(captions,
-                             memory_bank,
-                             enc_state if dec_state is None
-                             else dec_state,
-                             memory_lengths=lengths)
-
-            Tz = memory_bank
-            TzT = decoder_outputs
-
-
-            # print("Decoder Output" ,TzT.size())
-            # print("Captions: ",glove_emb(captions).size())
-
-            txt_rc_loss = 0
-
-            for x,y,l in zip(TzT.transpose(0,1),glove_emb(captions).transpose(0,1),lengths):
-                if args.criterion == 'MSE':
-                    txt_rc_loss +=
-                else:
-                    # ATTENTION Fails on last batch
-                    txt_rc_loss += txt_criterion(x, y, Variable(torch.ones(x.size(0))).cuda())/l
-
-            txt_rc_loss /= captions.size(1)
-
-
-
-
-            # Iz.requires_grad = False
-            Tz = Tz[0]
-
-
-            # print('Img Emb ',Iz.min())
-            # print('Text Emb ',Tz.min())
-
-            if args.criterion == 'MSE':
-                # cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
-                cm_loss = mse_loss(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
+            # current_embeddings = img_emb.data
+            if i:
+                # result_embeddings = torch.cat( \
+                result_embeddings = np.concatenate( \
+                    (result_embeddings, current_embeddings) \
+                    ,1)
             else:
-                cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask), \
-                                       Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))
-
-
-
-            # rate = 0.5
-            # img_loss = img_rc_loss * (1 - rate) + cm_loss * rate
-            # txt_loss = txt_rc_loss * (1 - rate) + cm_loss * rate
-            txt_loss = txt_rc_loss + cm_loss
-            img_loss = img_rc_loss + cm_loss
-
-            txt_losses.update(txt_rc_loss.data[0],args.batch_size)
-            img_losses.update(img_rc_loss.data[0],args.batch_size)
-            cm_losses.update(cm_loss.data[0], args.batch_size)
-
-            # Half of the times we update one pipeline the others the other one
-            if train_images:
-                # Image Network Training and Backpropagation
-
-                img_loss.backward()
-                img_optim.step()
-                # img_dec_optim.step()
-                # img_enc_optim.step()
-
-            else:
-                # Text Nextwork Training & Back Propagation
-
-                txt_loss.backward()
-                txt_optim.step()
-                # txt_dec_optim.step()
-                # txt_enc_optim.step()
-
-
+                result_embeddings = current_embeddings
 
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
 
             # plot progress
-            bar.suffix = '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss_Img: {img_l:.3f}| Loss_Txt: {txt_l:.3f} | Loss_CM: {cm_l:.4f}'.format(
+            bar.suffix = '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:}'.format(
                         batch=i,
-                        size=len(data_loader),
+                        size=len(val_loader),
                         bt=batch_time.avg,
                         total=bar.elapsed_td,
                         eta=bar.eta_td,
-                        img_l=img_losses.avg,
-                        txt_l=txt_losses.avg,
-                        cm_l=cm_losses.avg,
                         )
             bar.next()
         bar.finish()
 
-        # Save the models
-        print('\n')
-        print('Saving the models in {}...'.format(args.model_path))
-        torch.save(decoder_Img.state_dict(),
-                   os.path.join(args.model_path,
-                                'decoder-img-%d.pkl' %(epoch+1)))
-        torch.save(encoder_Img.state_dict(),
-                   os.path.join(args.model_path,
-                                'encoder-img-%d.pkl' %(epoch+1)))
-        torch.save(decoder_Txt.state_dict(),
-                   os.path.join(args.model_path,
-                                'decoder-txt-%d.pkl' %(epoch+1)))
-        torch.save(encoder_Txt.state_dict(),
-                   os.path.join(args.model_path,
-                                'encoder-txt-%d.pkl' %(epoch+1)))
 
-        #
-        # # VALIDATION TIME
-        # print('EPOCH ::: VALIDATION ::: ' + str(epoch + 1))
-        #
-        # # Set Evaluation Mode
-        # encoder_Img.eval()
-        #
-        # encoder_Txt.encoder.eval()
-        #
-        # # get pairs
-        # end = time.time()
-        #
-        # bar = Bar('Computing Validation Set Embeddings', max=len(val_loader))
-        #
-        # for i, (images, captions, lengths) in enumerate(val_loader):
-        #
-        #     # Set mini-batch dataset
-        #     images = to_var(images)
-        #     captions = to_var(captions)
-        #
-        #     captions = captions.transpose(0,1).unsqueeze(2)
-        #     lengths = torch.LongTensor(lengths)
-        #
-        #     _, img_emb = encoder_Img(images)
-        #
-        #     txt_emb, _ = encoder_Txt(captions, lengths)
-        #
-        #
-        #     # current_embeddings = torch.cat( \
-        #     #         (txt_emb.transpose(0,1).data,img_emb.unsqueeze(1).data)
-        #     #         , 1)
-        #     current_embeddings = np.concatenate( \
-        #         (txt_emb.cpu().data.numpy(),\
-        #          img_emb.unsqueeze(0).cpu().data.numpy())\
-        #         ,0)
-        #
-        #     # current_embeddings = img_emb.data
-        #     if i:
-        #         # result_embeddings = torch.cat( \
-        #         result_embeddings = np.concatenate( \
-        #             (result_embeddings, current_embeddings) \
-        #             ,1)
-        #     else:
-        #         result_embeddings = current_embeddings
-        #
-        #     # measure elapsed time
-        #     batch_time.update(time.time() - end)
-        #     end = time.time()
-        #
-        #     # plot progress
-        #     bar.suffix = '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:}'.format(
-        #                 batch=i,
-        #                 size=len(val_loader),
-        #                 bt=batch_time.avg,
-        #                 total=bar.elapsed_td,
-        #                 eta=bar.eta_td,
-        #                 )
-        #     bar.next()
-        # bar.finish()
-        #
-        #
-        # print("Computing Nearest Neighbors...")
-        # print("Computing Nearest Neighbors...")
-        #
-        # neigh = NearestNeighbors(5)
-        # neigh.fit(result_embeddings[1])
-        # kneigh = neigh.kneighbors(result_embeddings[0], return_distance=False)
-        # top5 = np.mean([i in nn for i,nn in enumerate(kneigh)])
-        #
-        # print("Top-5 accuracy for Image Retrieval: ",top5)
+        print("Computing Nearest Neighbors...")
+        print("Computing Nearest Neighbors...")
+        print(result_embeddings.shape)
+
+        k = 10
+        neigh = NearestNeighbors(k)
+        neigh.fit(result_embeddings[1])
+        kneigh = neigh.kneighbors(result_embeddings[0], return_distance=False)
+
+        rs = result_embeddings.sum(2)
+        a = (((result_embeddings[0][0]- result_embeddings[1][0])**2).mean())
+        b = (((result_embeddings[0][0]- result_embeddings[0][34])**2).mean())
+        topk = np.mean([int(i in nn) for i,nn in enumerate(kneigh)])
+        print("Top-{k:} accuracy for Image Retrieval:\n\n\t\033[95m {tpk: .3f}% \n".format(k= k,tpk= 100*topk))
 
 
 

@@ -68,3 +68,5 @@ class embedding(nn.Embedding):
 #         else:
 #             return orig_attr
 
+def mse_loss(input, target):
+    return torch.sum((input - target)**2) / input.data.nelement()
