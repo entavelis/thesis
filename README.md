@@ -7,6 +7,7 @@ __TO DO:__
 
 [Coupled Auto-Encoder Network](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf):
 - Do the _Karpathy Split_
+- Negative Sampling/Loss
 - Try masking common embedding: 
     - degree of masking
 - Try different embedding errors: 
