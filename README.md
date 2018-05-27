@@ -5,9 +5,10 @@
 
 __TO DO:__
 
-[Coupled Auto-Encoder Network](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf):
-![](abstract/media/pretraining.png)
 
+_[Coupled Auto-Encoder Network](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf)_:
+
+![](abstract/media/pretraining.png)
 - Do the _Karpathy Split_
 - Try masking common embedding: 
     - degree of masking
