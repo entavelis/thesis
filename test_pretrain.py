@@ -290,20 +290,28 @@ def main():
         bar.finish()
 
 
-        print("Computing Nearest Neighbors...")
-        print("Computing Nearest Neighbors...")
-        print(result_embeddings.shape)
+        a = [((result_embeddings[0][i] - result_embeddings[1][i]) ** 2).mean() for i in range(128)]
+        print("Validation MSE: ",np.mean(a))
+        print("Validation MSE: ",np.mean(a))
 
-        k = 10
-        neigh = NearestNeighbors(k)
-        neigh.fit(result_embeddings[1])
-        kneigh = neigh.kneighbors(result_embeddings[0], return_distance=False)
+        for i in range(2):
+            print("Computing Nearest Neighbors...")
 
-        rs = result_embeddings.sum(2)
-        a = (((result_embeddings[0][0]- result_embeddings[1][0])**2).mean())
-        b = (((result_embeddings[0][0]- result_embeddings[0][34])**2).mean())
-        topk = np.mean([int(i in nn) for i,nn in enumerate(kneigh)])
-        print("Top-{k:} accuracy for Image Retrieval:\n\n\t\033[95m {tpk: .3f}% \n".format(k= k,tpk= 100*topk))
+            if i:
+                result_embeddings[0] = result_embeddings[0]/result_embeddings[0].sum()
+                result_embeddings[1] = result_embeddings[1]/result_embeddings[1].sum()
+
+            k = 10
+            neigh = NearestNeighbors(k)
+            neigh.fit(result_embeddings[1])
+            kneigh = neigh.kneighbors(result_embeddings[0], return_distance=False)
+
+            # a = [((result_embeddings[0][i] - result_embeddings[1][i]) ** 2).mean() for i in range(128)]
+            # rs = result_embeddings.sum(2)
+            # a = (((result_embeddings[0][0]- result_embeddings[1][0])**2).mean())
+            # b = (((result_embeddings[0][0]- result_embeddings[0][34])**2).mean())
+            topk = np.mean([int(i in nn) for i,nn in enumerate(kneigh)])
+            print("Top-{k:} accuracy for Image Retrieval:\n\n\t\033[95m {tpk: .3f}% \n".format(k= k,tpk= 100*topk))
 
 
 

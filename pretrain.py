@@ -1,5 +1,6 @@
 import os
 import time
+import datetime
 
 import argparse
 from itertools import chain
@@ -95,6 +96,9 @@ def main():
     # global args
     args = parser.parse_args()
 
+    now = datetime.datetime.now()
+    current_date = now.strftime("%Y-%m-%d %H:%M")
+
     assert args.criterion in ("MSE","Cosine","Hinge"), 'Invalid Loss Function'
 
     mask = args.common_emb_size
@@ -122,6 +126,9 @@ def main():
         os.makedirs(result_path)
     if not os.path.exists(model_path):
         os.makedirs(model_path)
+
+    model_path += current_date
+    result_path += current_date
 
 
     # Load vocabulary wrapper.
@@ -185,7 +192,7 @@ def main():
     img_criterion = nn.MSELoss()
     # txt_criterion = nn.MSELoss(size_average=True)
     if args.criterion == 'MSE':
-        txt_criterion = nn.MSELoss(size_average=False)
+        txt_criterion = nn.MSELoss()
         cm_criterion = nn.MSELoss()
     elif args.criterion == "Cosine":
         txt_criterion = nn.CosineEmbeddingLoss(size_average=False)
@@ -219,7 +226,7 @@ def main():
     # txt_dec_optim = optim.Adam(valid_params(decoder_Txt.decoder.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
 
 
-    train_images = True
+    train_images = False # Reverse 2
     for epoch in range(args.num_epochs):
 
         # TRAINING TIME
@@ -300,23 +307,28 @@ def main():
                              else dec_state,
                              memory_lengths=lengths)
 
-            Tz = memory_bank
+            Tz = encoder_outputs
             TzT = decoder_outputs
 
 
             # print("Decoder Output" ,TzT.size())
             # print("Captions: ",glove_emb(captions).size())
 
-            txt_rc_loss = 0
-
-            for x,y,l in zip(TzT.transpose(0,1),glove_emb(captions).transpose(0,1),lengths):
-                if args.criterion == 'MSE':
-                    txt_rc_loss +=
-                else:
-                    # ATTENTION Fails on last batch
-                    txt_rc_loss += txt_criterion(x, y, Variable(torch.ones(x.size(0))).cuda())/l
-
-            txt_rc_loss /= captions.size(1)
+            if args.criterion == 'MSE':
+                txt_rc_loss = txt_criterion(TzT,glove_emb(captions))
+            else:
+                txt_rc_loss = txt_criterion(TzT, glove_emb(captions),\
+                                            Variable(torch.ones(TzT.size(0))).cuda())
+            #
+            # for x,y,l in zip(TzT.transpose(0,1),glove_emb(captions).transpose(0,1),lengths):
+            #     if args.criterion == 'MSE':
+            #         # ATTENTION dunno what's the right one
+            #         txt_rc_loss += txt_criterion(x,y)
+            #     else:
+            #         # ATTENTION Fails on last batch
+            #         txt_rc_loss += txt_criterion(x, y, Variable(torch.ones(x.size(0))).cuda())/l
+            #
+            # txt_rc_loss /= captions.size(1)
 
 
 
@@ -335,6 +347,26 @@ def main():
                 cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask), \
                                        Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))
 
+            # K - Negative Samples
+            k=5
+            for _ in range(k):
+
+                if cuda:
+                    perm = torch.randperm(args.batch_size).cuda()
+                else:
+                    perm = torch.randperm(args.batch_size)
+
+                txt =  Tz.narrow(1,0,mask)
+                im = Iz.narrow(1,0,mask)[perm]
+
+                sim  = (F.cosine_similarity(txt,txt[perm]) - 0.5)/2
+
+                if args.criterion == 'MSE':
+                    # cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
+                    cm_loss += mse_loss(txt, im, sim)
+                else:
+                    cm_loss += sim * cm_criterion(txt, im, \
+                                           Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))
 
 
             # rate = 0.5
@@ -386,18 +418,18 @@ def main():
 
         # Save the models
         print('\n')
-        print('Saving the models in {}...'.format(args.model_path))
+        print('Saving the models in {}...'.format(model_path))
         torch.save(decoder_Img.state_dict(),
-                   os.path.join(args.model_path,
+                   os.path.join(model_path,
                                 'decoder-img-%d.pkl' %(epoch+1)))
         torch.save(encoder_Img.state_dict(),
-                   os.path.join(args.model_path,
+                   os.path.join(model_path,
                                 'encoder-img-%d.pkl' %(epoch+1)))
         torch.save(decoder_Txt.state_dict(),
-                   os.path.join(args.model_path,
+                   os.path.join(model_path,
                                 'decoder-txt-%d.pkl' %(epoch+1)))
         torch.save(encoder_Txt.state_dict(),
-                   os.path.join(args.model_path,
+                   os.path.join(model_path,
                                 'encoder-txt-%d.pkl' %(epoch+1)))
 
         #
