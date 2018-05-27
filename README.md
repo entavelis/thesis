@@ -5,10 +5,7 @@
 
 __TO DO:__
 
-
-_[Coupled Auto-Encoder Network](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf)_:
-
-![](abstract/media/pretraining.png)
+[Coupled Auto-Encoder Network](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf):
 - Do the _Karpathy Split_
 - Try masking common embedding: 
     - degree of masking
@@ -24,10 +21,9 @@ _[Coupled Auto-Encoder Network](https://github.com/vglsd/thesis/blob/master/abst
 - Train only the encoders on some steps
 - Try Variational AE:
     - how wide range -> sigma
-    - 
     
 
-
+![](abstract/media/pretraining.png)
 
 
 ### Based on:
