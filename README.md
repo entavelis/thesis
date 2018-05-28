@@ -5,7 +5,10 @@
 [Architecture Description](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf)
 
 
+__Currently Implementing:__
+
 [Coupled Auto-Encoder Network](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf):
+
 __Novel Ideas to test:__
 - Negative Loss (j is a random image's index from the batch):
 
