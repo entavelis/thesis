@@ -8,7 +8,8 @@ __TO DO:__
 
 [Coupled Auto-Encoder Network](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf):
 - Do the _Karpathy Split_
-- Negative Sampling/Loss
+- Negative Loss:
+    ![equation](http://latex.codecogs.com/gif.latex?Concentration%3D%5Cfrac%7BTotalTemplate%7D%7BTotalVolume%7D)
 - Try masking common embedding: 
     - degree of masking
 - Try different embedding errors: 
