@@ -221,8 +221,8 @@ def main():
     # ATTENTION: Check betas and weight decay
     # ATTENTION: Check why valid_params fails on image networks with out of memory error
 
-    img_optim = optim.Adam(img_params, lr=args.learning_rate,betas=(0.5, 0.999), weight_decay=0.00001)
-    txt_optim = optim.Adam(valid_params(txt_params), lr=args.learning_rate,betas=(0.5, 0.999), weight_decay=0.00001)
+    img_optim = optim.Adam(img_params, lr=args.learning_rate) #,betas=(0.5, 0.999), weight_decay=0.00001)
+    txt_optim = optim.Adam(valid_params(txt_params), lr=args.learning_rate)#,betas=(0.5, 0.999), weight_decay=0.00001)
     # img_enc_optim = optim.Adam(encoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
     # img_dec_optim = optim.Adam(decoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
     # txt_enc_optim = optim.Adam(valid_params(encoder_Txt.encoder.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
@@ -358,25 +358,29 @@ def main():
                 else:
                     perm = torch.randperm(args.batch_size)
 
-                if args.criterion == 'MSE':
-                    cm_loss -= mse_loss(txt, im[perm])/k
-                else:
-                    cm_loss -= cm_criterion(txt, im[perm], \
-                                           Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))/k
-
-            cm_loss = Variable(torch.max(torch.FloatTensor([-0.001]).cuda(), cm_loss.data))
-
-                #
-                # sim  = (F.cosine_similarity(txt,txt[perm]) - 0.5)/2
-                #
                 # if args.criterion == 'MSE':
-                #     # cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
-                #     cm_loss += mse_loss(txt, im[perm], sim)
+                #     cm_loss -= mse_loss(txt, im[perm])/k
                 # else:
-                #     cm_loss += sim * cm_criterion(txt, im[perm], \
-                #                            Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))
+                #     cm_loss -= cm_criterion(txt, im[perm], \
+                #                            Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))/k
 
 
+
+                # sim  = (F.cosine_similarity(txt,txt[perm]) - 0.5)/2
+                if epoch > 1:
+                    sim  = F.cosine_similarity(txt,txt[perm])
+                else:
+                    sim  = F.cosine_similarity(txt,txt[perm]) - 0.5
+
+                if args.criterion == 'MSE':
+                    # cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
+                    cm_loss += mse_loss(txt, im[perm], sim)
+                else:
+                    cm_loss += sim * cm_criterion(txt, im[perm], \
+                                           Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))
+
+
+            # cm_loss = Variable(torch.max(torch.FloatTensor([-0.100]).cuda(), cm_loss.data))
 
 
             # Computes the loss to be back-propagated

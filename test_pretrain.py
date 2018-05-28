@@ -228,8 +228,12 @@ def main():
         # mask = 300
 
         suffix = '-{}-05-28-09-23.pkl'.format(epoch+1)
+        # suffix = '-{}-05-28-16-45.pkl'.format(epoch+1)
         # suffix = '-{}-05-28-11-35.pkl'.format(epoch+1)
         mask = 200
+
+        # suffix = '-{}-05-28-15-39.pkl'.format(epoch+1)
+        # mask = 100
 
         print(suffix)
         try:

@@ -12,7 +12,9 @@ __Currently Implementing:__
 __Novel Ideas to test:__
 - Additionally to the goal to have corresponding images and sentences to match, we want different images and sentences to be further apart in the common representation space. For that reason we introduce a _negative Loss_ (j is a random image's index from the batch):
 
-    ![equation](http://latex.codecogs.com/gif.latex?Loss_%7Bcm%7D%28i%29%29%20%3D%20max%28-0.001%2C%20mse%28E_%7Btxt%7D%28i%29%2CE_%7Bimg%7D%28i%29%29%20-%20%5Cfrac%7B%5Csum_%7Bi%3D1%7D%5Ek%7Bmse%28E_%7Btxt%7D%28i%29%2CE_%7Bimg%7D%28j_k%29%29%7D%7D%7Bk%7D%29)
+    - ![equation](http://latex.codecogs.com/gif.latex?Loss_%7Bcm%7D%28i%29%29%20%3D%20max%28-0.001%2C%20mse%28E_%7Btxt%7D%28i%29%2CE_%7Bimg%7D%28i%29%29%20-%20%5Cfrac%7B%5Csum_%7Bi%3D1%7D%5Ek%7Bmse%28E_%7Btxt%7D%28i%29%2CE_%7Bimg%7D%28j_k%29%29%7D%7D%7Bk%7D%29)
+    - factor additional losses between current text i and random batch image k based on cosine similarity of text i 
+    and text j
     
 - Have the multi-modal representation to be a partial intersection between the embedding vectors of the two modalities. So, we limit our cross modal error to a percentage of the elements of the representation vectors, expecting the unique to the mode semantics to concentrate on the remaining elements, and the common elements to get richer on the multi-modal information.
 
