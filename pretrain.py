@@ -1,6 +1,13 @@
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+
 import os
 import time
 import datetime
+
+import scipy
 
 import argparse
 from itertools import chain
@@ -27,8 +34,6 @@ from image_caption.data_loader import get_loader
 from pytorch_classification.utils import Bar, AverageMeter
 
 from sklearn.neighbors import NearestNeighbors
-
-
 
 # from progressbar import ETA, Bar, Percentage, ProgressBar
 
@@ -90,14 +95,14 @@ parser.add_argument('--learning_rate', type=float, default=0.001)
 
 parser.add_argument('--criterion', type=str, default='MSE')
 
-parser.add_argument('--common_emb_size', type=str, default = 200)
+parser.add_argument('--common_emb_size', type=int, default = 100)
 
 def main():
     # global args
     args = parser.parse_args()
 
     now = datetime.datetime.now()
-    current_date = now.strftime("%Y-%m-%d %H:%M")
+    current_date = now.strftime("%m-%d-%H-%M")
 
     assert args.criterion in ("MSE","Cosine","Hinge"), 'Invalid Loss Function'
 
@@ -127,8 +132,6 @@ def main():
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 
-    model_path += current_date
-    result_path += current_date
 
 
     # Load vocabulary wrapper.
@@ -218,8 +221,8 @@ def main():
     # ATTENTION: Check betas and weight decay
     # ATTENTION: Check why valid_params fails on image networks with out of memory error
 
-    img_optim = optim.Adam(img_params, lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
-    txt_optim = optim.Adam(valid_params(txt_params), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
+    img_optim = optim.Adam(img_params, lr=args.learning_rate,betas=(0.5, 0.999), weight_decay=0.00001)
+    txt_optim = optim.Adam(valid_params(txt_params), lr=args.learning_rate,betas=(0.5, 0.999), weight_decay=0.00001)
     # img_enc_optim = optim.Adam(encoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
     # img_dec_optim = optim.Adam(decoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
     # txt_enc_optim = optim.Adam(valid_params(encoder_Txt.encoder.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
@@ -318,7 +321,7 @@ def main():
                 txt_rc_loss = txt_criterion(TzT,glove_emb(captions))
             else:
                 txt_rc_loss = txt_criterion(TzT, glove_emb(captions),\
-                                            Variable(torch.ones(TzT.size(0))).cuda())
+                                            Variable(torch.ones(TzT.size(0,1))).cuda())
             #
             # for x,y,l in zip(TzT.transpose(0,1),glove_emb(captions).transpose(0,1),lengths):
             #     if args.criterion == 'MSE':
@@ -332,20 +335,19 @@ def main():
 
 
 
+            # Computes Cross-Modal Loss
 
-            # Iz.requires_grad = False
             Tz = Tz[0]
 
-
-            # print('Img Emb ',Iz.min())
-            # print('Text Emb ',Tz.min())
+            txt =  Tz.narrow(1,0,mask)
+            im = Iz.narrow(1,0,mask)
 
             if args.criterion == 'MSE':
                 # cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
-                cm_loss = mse_loss(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
+                cm_loss = mse_loss(txt, im)
             else:
-                cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask), \
-                                       Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))
+                cm_loss = cm_criterion(txt, im, \
+                                       Variable(torch.ones(im.size(0)).cuda()))
 
             # K - Negative Samples
             k=5
@@ -356,24 +358,25 @@ def main():
                 else:
                     perm = torch.randperm(args.batch_size)
 
-                txt =  Tz.narrow(1,0,mask)
-                im = Iz.narrow(1,0,mask)[perm]
 
                 sim  = (F.cosine_similarity(txt,txt[perm]) - 0.5)/2
 
                 if args.criterion == 'MSE':
                     # cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
-                    cm_loss += mse_loss(txt, im, sim)
+                    cm_loss += mse_loss(txt, im[perm], sim)
                 else:
-                    cm_loss += sim * cm_criterion(txt, im, \
+                    cm_loss += sim * cm_criterion(txt, im[perm], \
                                            Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))
 
 
-            # rate = 0.5
-            # img_loss = img_rc_loss * (1 - rate) + cm_loss * rate
-            # txt_loss = txt_rc_loss * (1 - rate) + cm_loss * rate
-            txt_loss = txt_rc_loss + cm_loss
-            img_loss = img_rc_loss + cm_loss
+
+
+            # Computes the loss to be back-propagated
+            rate = 0.2
+            img_loss = img_rc_loss * (1 - rate) + cm_loss * rate
+            txt_loss = txt_rc_loss * (1 - rate) + cm_loss * rate
+            # txt_loss = txt_rc_loss + cm_loss
+            # img_loss = img_rc_loss + cm_loss
 
             txt_losses.update(txt_rc_loss.data[0],args.batch_size)
             img_losses.update(img_rc_loss.data[0],args.batch_size)
@@ -397,6 +400,19 @@ def main():
                 # txt_enc_optim.step()
 
 
+            if i % args.image_save_interval == 0:
+                subdir_path = os.path.join( result_path, str(i / args.image_save_interval) )
+
+                if os.path.exists( subdir_path ):
+                    pass
+                else:
+                    os.makedirs( subdir_path )
+
+                for im_idx in range(3):
+                    im = (IzI[im_idx].cpu().data.numpy().transpose(1,2,0)/2+.5)*255
+                    # im = (images[im_idx].cpu().data.numpy().transpose(1,2,0)+1.)*127.
+                    filename_prefix = os.path.join (subdir_path, str(im_idx))
+                    scipy.misc.imsave( filename_prefix + '.A.jpg', im)
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -421,16 +437,16 @@ def main():
         print('Saving the models in {}...'.format(model_path))
         torch.save(decoder_Img.state_dict(),
                    os.path.join(model_path,
-                                'decoder-img-%d.pkl' %(epoch+1)))
+                                'decoder-img-%d-' %(epoch+1)) + current_date + ".pkl")
         torch.save(encoder_Img.state_dict(),
                    os.path.join(model_path,
-                                'encoder-img-%d.pkl' %(epoch+1)))
+                                'encoder-img-%d-' %(epoch+1)) + current_date + ".pkl")
         torch.save(decoder_Txt.state_dict(),
                    os.path.join(model_path,
-                                'decoder-txt-%d.pkl' %(epoch+1)))
+                                'decoder-txt-%d-' %(epoch+1)) + current_date + ".pkl")
         torch.save(encoder_Txt.state_dict(),
                    os.path.join(model_path,
-                                'encoder-txt-%d.pkl' %(epoch+1)))
+                                'encoder-txt-%d-' %(epoch+1)) + current_date + ".pkl")
 
         #
         # # VALIDATION TIME

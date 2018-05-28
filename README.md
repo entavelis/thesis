@@ -2,6 +2,7 @@
 
 ![](abstract/media/mmmGanwide.png)
 
+[Architecture Description](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf):
 
 __TO DO:__
 
