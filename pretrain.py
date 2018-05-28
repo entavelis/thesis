@@ -95,7 +95,7 @@ parser.add_argument('--learning_rate', type=float, default=0.001)
 
 parser.add_argument('--criterion', type=str, default='MSE')
 
-parser.add_argument('--common_emb_size', type=int, default = 100)
+parser.add_argument('--common_emb_size', type=int, default = 200)
 
 def main():
     # global args
@@ -358,25 +358,33 @@ def main():
                 else:
                     perm = torch.randperm(args.batch_size)
 
-
-                sim  = (F.cosine_similarity(txt,txt[perm]) - 0.5)/2
-
                 if args.criterion == 'MSE':
-                    # cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
-                    cm_loss += mse_loss(txt, im[perm], sim)
+                    cm_loss -= mse_loss(txt, im[perm])/k
                 else:
-                    cm_loss += sim * cm_criterion(txt, im[perm], \
-                                           Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))
+                    cm_loss -= cm_criterion(txt, im[perm], \
+                                           Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))/k
+
+            cm_loss = Variable(torch.max(torch.FloatTensor([-0.001]).cuda(), cm_loss.data))
+
+                #
+                # sim  = (F.cosine_similarity(txt,txt[perm]) - 0.5)/2
+                #
+                # if args.criterion == 'MSE':
+                #     # cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
+                #     cm_loss += mse_loss(txt, im[perm], sim)
+                # else:
+                #     cm_loss += sim * cm_criterion(txt, im[perm], \
+                #                            Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))
 
 
 
 
             # Computes the loss to be back-propagated
-            rate = 0.2
-            img_loss = img_rc_loss * (1 - rate) + cm_loss * rate
-            txt_loss = txt_rc_loss * (1 - rate) + cm_loss * rate
-            # txt_loss = txt_rc_loss + cm_loss
-            # img_loss = img_rc_loss + cm_loss
+            # rate = 0.2
+            # img_loss = img_rc_loss * (1 - rate) + cm_loss * rate
+            # txt_loss = txt_rc_loss * (1 - rate) + cm_loss * rate
+            txt_loss = txt_rc_loss + cm_loss
+            img_loss = img_rc_loss + cm_loss
 
             txt_losses.update(txt_rc_loss.data[0],args.batch_size)
             img_losses.update(img_rc_loss.data[0],args.batch_size)
