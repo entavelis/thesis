@@ -2,14 +2,16 @@
 
 ![](abstract/media/mmmGanwide.png)
 
-[Architecture Description](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf):
+[Architecture Description](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf)
 
 __TO DO:__
 
 [Coupled Auto-Encoder Network](https://github.com/vglsd/thesis/blob/master/abstract/m3GAN-entavelis.pdf):
 - Do the _Karpathy Split_
 - Negative Loss:
-    ![equation](http://latex.codecogs.com/gif.latex?Concentration%3D%5Cfrac%7BTotalTemplate%7D%7BTotalVolume%7D)
+
+    ![equation](http://latex.codecogs.com/gif.latex?Loss_%7Bcm%7D%28i%29%29%20%3D%20max%28-0.001%2C%20mse%28E_%7Btxt%7D%28i%29%29%2CE_%7Bimg%7D%28i%29%29%29%20-%20%5Cfrac%7B%5Csum_%7Bi%3D1%7D%5Ek%7Bmse%28E_%7Btxt%7D%28i%29%2CE_%7Bimg%7D%28j_k%29%29%7D%7D%7Bk%7D%29)
+    
 - Try masking common embedding: 
     - degree of masking
 - Try different embedding errors: 
