@@ -174,25 +174,8 @@ def main():
 
     if cuda:
         encoder_Txt = encoder_Txt.cuda()
-        decoder_Img = decoder_Img.cuda()
 
         encoder_Img = encoder_Img.cuda()
-        decoder_Txt = decoder_Txt.cuda()
-
-
-    # Losses and Optimizers
-    print("Setting up the Objective Functions...")
-    img_criterion = nn.MSELoss()
-    # txt_criterion = nn.MSELoss(size_average=True)
-    if args.criterion == 'MSE':
-        txt_criterion = nn.MSELoss()
-        cm_criterion = nn.MSELoss()
-    elif args.criterion == "Cosine":
-        txt_criterion = nn.CosineEmbeddingLoss(size_average=False)
-        cm_criterion = nn.CosineEmbeddingLoss()
-    else:
-        txt_criterion = nn.HingeEmbeddingLoss(size_average=False)
-        cm_criterion = nn.HingeEmbeddingLoss()
 
 
     # txt_criterion = nn.CrossEntropyLoss()
@@ -228,12 +211,17 @@ def main():
         # mask = 300
 
         suffix = '-{}-05-28-09-23.pkl'.format(epoch+1)
-        # suffix = '-{}-05-28-16-45.pkl'.format(epoch+1)
         # suffix = '-{}-05-28-11-35.pkl'.format(epoch+1)
+        # suffix = '-{}-05-28-16-45.pkl'.format(epoch+1)
+        # suffix = '-{}-05-29-00-28.pkl'.format(epoch+1)
+        # suffix = '-{}-05-29-00-30.pkl'.format(epoch+1)
+        # suffix = '-{}-05-29-01-08.pkl'.format(epoch+1)
         mask = 200
 
         # suffix = '-{}-05-28-15-39.pkl'.format(epoch+1)
-        # mask = 100
+        # suffix = '-{}-05-29-12-11.pkl'.format(epoch+1)
+        suffix = '-{}-05-29-12-14.pkl'.format(epoch+1)
+        mask = 100
 
         print(suffix)
         try:
@@ -257,7 +245,7 @@ def main():
         bar = Bar('Computing Validation Set Embeddings', max=len(val_loader))
 
         for i, (images, captions, lengths) in enumerate(val_loader):
-            if i == 2:
+            if i == 20:
                 break
 
             # Set mini-batch dataset

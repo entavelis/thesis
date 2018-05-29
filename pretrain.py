@@ -93,9 +93,11 @@ parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--num_workers', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.001)
 
-parser.add_argument('--criterion', type=str, default='MSE')
+parser.add_argument('--text_criterion', type=str, default='MSE')
+parser.add_argument('--cm_criterion', type=str, default='Cosine')
 
-parser.add_argument('--common_emb_size', type=int, default = 200)
+parser.add_argument('--common_emb_size', type=int, default = 100)
+parser.add_argument('--negative_samples', type=int, default = 5)
 
 def main():
     # global args
@@ -104,7 +106,8 @@ def main():
     now = datetime.datetime.now()
     current_date = now.strftime("%m-%d-%H-%M")
 
-    assert args.criterion in ("MSE","Cosine","Hinge"), 'Invalid Loss Function'
+    assert args.text_criterion in ("MSE","Cosine","Hinge"), 'Invalid Loss Function'
+    assert args.cm_criterion in ("MSE","Cosine","Hinge"), 'Invalid Loss Function'
 
     mask = args.common_emb_size
     assert mask <= args.hidden_size
@@ -194,14 +197,18 @@ def main():
     print("Setting up the Objective Functions...")
     img_criterion = nn.MSELoss()
     # txt_criterion = nn.MSELoss(size_average=True)
-    if args.criterion == 'MSE':
+    if args.text_criterion == 'MSE':
         txt_criterion = nn.MSELoss()
-        cm_criterion = nn.MSELoss()
-    elif args.criterion == "Cosine":
+    elif args.text_criterion == "Cosine":
         txt_criterion = nn.CosineEmbeddingLoss(size_average=False)
-        cm_criterion = nn.CosineEmbeddingLoss()
     else:
         txt_criterion = nn.HingeEmbeddingLoss(size_average=False)
+
+    if args.cm_criterion == 'MSE':
+        cm_criterion = nn.MSELoss()
+    elif args.cm_criterion == "Cosine":
+        cm_criterion = nn.CosineEmbeddingLoss()
+    else:
         cm_criterion = nn.HingeEmbeddingLoss()
 
 
@@ -221,8 +228,8 @@ def main():
     # ATTENTION: Check betas and weight decay
     # ATTENTION: Check why valid_params fails on image networks with out of memory error
 
-    img_optim = optim.Adam(img_params, lr=args.learning_rate) #,betas=(0.5, 0.999), weight_decay=0.00001)
-    txt_optim = optim.Adam(valid_params(txt_params), lr=args.learning_rate)#,betas=(0.5, 0.999), weight_decay=0.00001)
+    img_optim = optim.Adam(img_params, lr=0.001) #,betas=(0.5, 0.999), weight_decay=0.00001)
+    txt_optim = optim.Adam(valid_params(txt_params), lr=0.0005)#,betas=(0.5, 0.999), weight_decay=0.00001)
     # img_enc_optim = optim.Adam(encoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
     # img_dec_optim = optim.Adam(decoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
     # txt_enc_optim = optim.Adam(valid_params(encoder_Txt.encoder.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
@@ -317,7 +324,7 @@ def main():
             # print("Decoder Output" ,TzT.size())
             # print("Captions: ",glove_emb(captions).size())
 
-            if args.criterion == 'MSE':
+            if args.text_criterion == 'MSE':
                 txt_rc_loss = txt_criterion(TzT,glove_emb(captions))
             else:
                 txt_rc_loss = txt_criterion(TzT, glove_emb(captions),\
@@ -342,7 +349,7 @@ def main():
             txt =  Tz.narrow(1,0,mask)
             im = Iz.narrow(1,0,mask)
 
-            if args.criterion == 'MSE':
+            if args.cm_criterion == 'MSE':
                 # cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
                 cm_loss = mse_loss(txt, im)
             else:
@@ -350,7 +357,7 @@ def main():
                                        Variable(torch.ones(im.size(0)).cuda()))
 
             # K - Negative Samples
-            k=5
+            k = args.negative_samples
             for _ in range(k):
 
                 if cuda:
@@ -364,20 +371,15 @@ def main():
                 #     cm_loss -= cm_criterion(txt, im[perm], \
                 #                            Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))/k
 
-
-
                 # sim  = (F.cosine_similarity(txt,txt[perm]) - 0.5)/2
-                if epoch > 1:
-                    sim  = F.cosine_similarity(txt,txt[perm])
-                else:
-                    sim  = F.cosine_similarity(txt,txt[perm]) - 0.5
 
-                if args.criterion == 'MSE':
+                if args.cm_criterion == 'MSE':
+                    sim  = (F.cosine_similarity(txt,txt[perm]) - 1)/(2*k)
                     # cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
                     cm_loss += mse_loss(txt, im[perm], sim)
                 else:
-                    cm_loss += sim * cm_criterion(txt, im[perm], \
-                                           Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))
+                    cm_loss += cm_criterion(txt, im[perm], \
+                                           Variable(-1*torch.ones(txt.size(0)).cuda()))/k
 
 
             # cm_loss = Variable(torch.max(torch.FloatTensor([-0.100]).cuda(), cm_loss.data))
@@ -388,7 +390,7 @@ def main():
             # img_loss = img_rc_loss * (1 - rate) + cm_loss * rate
             # txt_loss = txt_rc_loss * (1 - rate) + cm_loss * rate
             txt_loss = txt_rc_loss + cm_loss
-            img_loss = img_rc_loss + cm_loss
+            img_loss = img_rc_loss + 0.1 * cm_loss
 
             txt_losses.update(txt_rc_loss.data[0],args.batch_size)
             img_losses.update(img_rc_loss.data[0],args.batch_size)
