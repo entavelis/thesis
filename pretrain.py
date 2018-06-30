@@ -96,7 +96,7 @@ parser.add_argument('--learning_rate', type=float, default=0.001)
 parser.add_argument('--text_criterion', type=str, default='MSE')
 parser.add_argument('--cm_criterion', type=str, default='Cosine')
 
-parser.add_argument('--common_emb_size', type=int, default = 100)
+parser.add_argument('--common_emb_size', type=int, default = 200)
 parser.add_argument('--negative_samples', type=int, default = 5)
 
 def main():
@@ -128,7 +128,7 @@ def main():
                              (0.229, 0.224, 0.225))])
 
     result_path = args.result_path
-    model_path = args.model_path
+    model_path = args.model_path + current_date + "/"
 
     if not os.path.exists(result_path):
         os.makedirs(result_path)
@@ -228,8 +228,8 @@ def main():
     # ATTENTION: Check betas and weight decay
     # ATTENTION: Check why valid_params fails on image networks with out of memory error
 
-    img_optim = optim.Adam(img_params, lr=0.001) #,betas=(0.5, 0.999), weight_decay=0.00001)
-    txt_optim = optim.Adam(valid_params(txt_params), lr=0.0005)#,betas=(0.5, 0.999), weight_decay=0.00001)
+    img_optim = optim.Adam(img_params, lr=0.0001, betas=(0.5, 0.999)) #, weight_decay=0.00001)
+    txt_optim = optim.Adam(valid_params(txt_params), lr=0.0001,betas=(0.5, 0.999)) #, weight_decay=0.00001)
     # img_enc_optim = optim.Adam(encoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
     # img_dec_optim = optim.Adam(decoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
     # txt_enc_optim = optim.Adam(valid_params(encoder_Txt.encoder.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
@@ -423,9 +423,11 @@ def main():
                     os.makedirs( subdir_path )
 
                 for im_idx in range(3):
+                    im_or = (images[im_idx].cpu().data.numpy().transpose(1,2,0)/2+.5)*255
                     im = (IzI[im_idx].cpu().data.numpy().transpose(1,2,0)/2+.5)*255
-                    # im = (images[im_idx].cpu().data.numpy().transpose(1,2,0)+1.)*127.
+
                     filename_prefix = os.path.join (subdir_path, str(im_idx))
+                    scipy.misc.imsave( filename_prefix + '_original.A.jpg', im_or)
                     scipy.misc.imsave( filename_prefix + '.A.jpg', im)
 
             # measure elapsed time

@@ -154,48 +154,29 @@ def main():
     # Build data loader
     print("Building Data Loader For Test Set...")
     data_loader = get_loader(args.image_dir, args.caption_path, vocab,
+
                              transform, args.batch_size,
                              shuffle=True, num_workers=args.num_workers)
 
     print("Building Data Loader For Validation Set...")
     val_loader = get_loader(args.valid_dir, args.valid_caption_path, vocab,
                              transform, args.batch_size,
-                             shuffle=False, num_workers=args.num_workers)
+                             shuffle=True, num_workers=args.num_workers)
 
     print("Setting up the Networks...")
     encoder_Txt = TextEncoderOld(glove_emb, num_layers=1, bidirectional=False, hidden_size=args.hidden_size)
-    decoder_Txt = TextDecoderOld(glove_emb, num_layers=1, bidirectional=False, hidden_size=args.hidden_size)
+    # decoder_Txt = TextDecoderOld(glove_emb, num_layers=1, bidirectional=False, hidden_size=args.hidden_size)
     # decoder_Txt = TextDecoder(encoder_Txt, glove_emb)
     # decoder_Txt = DecoderRNN(glove_emb, hidden_size=args.hidden_size)
 
 
     encoder_Img = ImageEncoder(img_dimension=args.crop_size,feature_dimension= args.hidden_size)
-    decoder_Img = ImageDecoder(img_dimension=args.crop_size, feature_dimension= args.hidden_size)
+    # decoder_Img = ImageDecoder(img_dimension=args.crop_size, feature_dimension= args.hidden_size)
 
     if cuda:
         encoder_Txt = encoder_Txt.cuda()
 
         encoder_Img = encoder_Img.cuda()
-
-
-    # txt_criterion = nn.CrossEntropyLoss()
-
-    #     gen_params = chain(generator_A.parameters(), generator_B.parameters())
-    print("Setting up the Optimizers...")
-    # img_params = chain(decoder_Img.parameters(), encoder_Img.parameters())
-    # txt_params = chain(decoder_Txt.decoder.parameters(), encoder_Txt.encoder.parameters())
-    img_params = list(decoder_Img.parameters()) + list(encoder_Img.parameters())
-    txt_params = list(decoder_Txt.decoder.parameters()) + list(encoder_Txt.encoder.parameters())
-
-    # ATTENTION: Check betas and weight decay
-    # ATTENTION: Check why valid_params fails on image networks with out of memory error
-
-    img_optim = optim.Adam(img_params, lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
-    txt_optim = optim.Adam(valid_params(txt_params), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
-    # img_enc_optim = optim.Adam(encoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
-    # img_dec_optim = optim.Adam(decoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
-    # txt_enc_optim = optim.Adam(valid_params(encoder_Txt.encoder.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
-    # txt_dec_optim = optim.Adam(valid_params(decoder_Txt.decoder.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
 
 
     for epoch in range(args.num_epochs):
@@ -220,7 +201,10 @@ def main():
 
         # suffix = '-{}-05-28-15-39.pkl'.format(epoch+1)
         # suffix = '-{}-05-29-12-11.pkl'.format(epoch+1)
-        suffix = '-{}-05-29-12-14.pkl'.format(epoch+1)
+        # suffix = '-{}-05-29-12-14.pkl'.format(epoch+1)
+        # suffix = '-{}-05-29-14-24.pkl'.format(epoch+1)
+        # suffix = '-{}-05-29-15-43.pkl'.format(epoch+1)
+        suffix = '-{}-06-29-18-31.pkl'.format(epoch+1)
         mask = 100
 
         print(suffix)
@@ -242,10 +226,11 @@ def main():
         batch_time = AverageMeter()
         end = time.time()
 
-        bar = Bar('Computing Validation Set Embeddings', max=len(val_loader))
+        loader = val_loader
+        bar = Bar('Computing Validation Set Embeddings', max=len(loader))
 
-        for i, (images, captions, lengths) in enumerate(val_loader):
-            if i == 20:
+        for i, (images, captions, lengths) in enumerate(loader):
+            if i == 16:
                 break
 
             # Set mini-batch dataset
