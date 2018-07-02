@@ -33,6 +33,7 @@ from image_caption.build_vocab import Vocabulary
 from image_caption.data_loader import get_loader
 
 from pytorch_classification.utils import Bar, AverageMeter
+from validate import validate
 
 from sklearn.neighbors import NearestNeighbors
 
@@ -98,9 +99,13 @@ parser.add_argument('--learning_rate', type=float, default=0.001)
 
 parser.add_argument('--text_criterion', type=str, default='MSE')
 parser.add_argument('--cm_criterion', type=str, default='Cosine')
+parser.add_argument('--cm_loss_weight', type=float, default=0.8)
 
 parser.add_argument('--common_emb_size', type=int, default = 100)
 parser.add_argument('--negative_samples', type=int, default = 5)
+
+parser.add_argument('--validate', type=str, default = "false")
+
 #</editor-fold>
 
 def main():
@@ -290,7 +295,7 @@ def main():
         encoder_Txt.encoder.train()
         decoder_Txt.decoder.train()
 
-        # <\editor-fold desc = "Epoch Initialization"?
+        # </editor-fold desc = "Epoch Initialization"?
 
         train_images = not train_images
         for i, (images, captions, lengths) in enumerate(data_loader):
@@ -299,6 +304,8 @@ def main():
             if i == len(data_loader)-1:
                 break
 
+
+            # <editor-fold desc = "Training Parameters Initiliazation"?
 
             # Set mini-batch dataset
             images = to_var(images)
@@ -325,17 +332,17 @@ def main():
             # encoder_Txt.encoder.zero_grad()
             # decoder_Txt.decoder.zero_grad()
 
-            # Image Auto_Encoder Forward
+            # </editor-fold desc = "Training Parameters Initiliazation"?
 
             # <editor-fold desc = "Image AE"?
 
+            # Image Auto_Encoder Forward
             img_encoder_outputs, Iz  = encoder_Img(images)
 
             IzI = decoder_Img(img_encoder_outputs)
 
             img_rc_loss = img_criterion(IzI,images)
             # </editor-fold desc = "Image AE"?
-
 
             # <editor-fold desc = "Seq2Seq AE"?
             # Text Auto Encoder Forward
@@ -364,6 +371,7 @@ def main():
 
             # </editor-fold desc = "Seq2Seq AE"?
 
+            # <editor-fold desc = "Loss accumulation"?
             if args.text_criterion == 'MSE':
                 txt_rc_loss = txt_criterion(TzT,glove_emb(captions))
             else:
@@ -426,16 +434,17 @@ def main():
 
 
             # Computes the loss to be back-propagated
-            rate = 0.8
-            img_loss = img_rc_loss * (1 - rate) + cm_loss * rate
-            txt_loss = txt_rc_loss * (1 - rate) + cm_loss * rate
+            img_loss = img_rc_loss * (1 - args.cm_loss_weight) + cm_loss * args.cm_loss_weight
+            txt_loss = txt_rc_loss * (1 - args.cm_loss_weight) + cm_loss * args.cm_loss_weight
             # txt_loss = txt_rc_loss + 0.1 * cm_loss
             # img_loss = img_rc_loss + cm_loss
 
             txt_losses.update(txt_rc_loss.data[0],args.batch_size)
             img_losses.update(img_rc_loss.data[0],args.batch_size)
             cm_losses.update(cm_loss.data[0], args.batch_size)
+            # </editor-fold desc = "Loss accumulation"?
 
+            # <editor-fold desc = "Back Propagation">
             # Half of the times we update one pipeline the others the other one
             if train_images:
                 # Image Network Training and Backpropagation
@@ -453,7 +462,9 @@ def main():
                 txt_dec_optim.step()
                 txt_enc_optim.step()
 
+            # </editor-fold desc = "Back Propagation">
 
+            # <editor-fold desc = "Logging">
             if i % args.image_save_interval == 0:
                 subdir_path = os.path.join( result_path, str(i / args.image_save_interval) )
 
@@ -487,8 +498,11 @@ def main():
                         )
             bar.next()
 
+            # </editor-fold desc = "Logging">
+
         bar.finish()
 
+        # <editor-fold desc = "Saving the models"?
         # Save the models
         print('\n')
         print('Saving the models in {}...'.format(model_path))
@@ -505,13 +519,10 @@ def main():
                    os.path.join(model_path,
                                 'encoder-txt-%d-' %(epoch+1)) + current_date + ".pkl")
 
+        # </editor-fold desc = "Saving the models"?
 
-
-
-
-
-
-
+        if args.validate == "true":
+            validate(encoder_Img, encoder_Txt, val_loader, mask, 10)
 
 
 if __name__ == "__main__":
