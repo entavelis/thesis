@@ -1,4 +1,3 @@
-# <editor-fold desc="Dependencies">
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -38,16 +37,13 @@ from sklearn.neighbors import NearestNeighbors
 
 # from progressbar import ETA, Bar, Percentage, ProgressBar
 
-# </editor-fold>
-
-#<editor-fold desc="Arguments"
 parser = argparse.ArgumentParser()
 parser.add_argument('--cuda', type=str, default='true', help='Set cuda usage')
 parser.add_argument('--epoch_size', type=int, default=5000, help='Set epoch size')
-parser.add_argument('--result_path', type=str, default='NONE',
+parser.add_argument('--result_path', type=str, default='./results/',
                     help='Set the path the result images will be saved.')
 
-parser.add_argument('--image_size', type=int, default=64, help='Image size. 64 for every experiment in the paper')
+parser.add_argument('--image_size', type=int, default=256, help='Image size. 64 for every experiment in the paper')
 
 parser.add_argument('--update_interval', type=int, default=3, help='')
 parser.add_argument('--log_interval', type=int, default=50, help='Print loss values every log_interval iterations.')
@@ -59,13 +55,13 @@ parser.add_argument('--model_save_interval', type=int, default=10000,
 parser.add_argument('--model_path', type=str, default='./models/',
                     help='path for saving trained models')
 
-parser.add_argument('--crop_size', type=int, default=64, #224
+parser.add_argument('--crop_size', type=int, default=128, #224
                     help='size for randomly cropping images')
 parser.add_argument('--vocab_path', type=str, default='./data/vocab.pkl',
                     help='path for vocabulary wrapper')
-parser.add_argument('--image_dir', type=str, default='./data/train_resized2014_70x70',
+parser.add_argument('--image_dir', type=str, default='./data/resized2014',
                     help='directory for resized images')
-parser.add_argument('--valid_dir', type=str, default='./data/val_resized2014_70x70',
+parser.add_argument('--valid_dir', type=str, default='./data/val_resized2014',
                     help='directory for resized validation set images')
 
 parser.add_argument('--embedding_path', type=str,
@@ -82,6 +78,7 @@ parser.add_argument('--log_step', type=int, default=10,
 parser.add_argument('--save_step', type=int, default=1000,
                     help='step size for saving trained models')
 
+
 # Model parameters
 parser.add_argument('--embedding_size', type=int, default=300)
 parser.add_argument('--hidden_size', type=int, default=300,
@@ -92,7 +89,7 @@ parser.add_argument('--num_layers', type=int, default=1,
 parser.add_argument('--extra_layers', type=str, default='true')
 parser.add_argument('--fixed_embeddings', type=str, default="true")
 parser.add_argument('--num_epochs', type=int, default=100)
-parser.add_argument('--batch_size', type=int, default= 256)
+parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--num_workers', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.001)
 
@@ -101,18 +98,15 @@ parser.add_argument('--cm_criterion', type=str, default='Cosine')
 
 parser.add_argument('--common_emb_size', type=int, default = 100)
 parser.add_argument('--negative_samples', type=int, default = 5)
-#</editor-fold>
 
 def main():
     # global args
     args = parser.parse_args()
 
-    # <editor-fold desc="Initialization">
-
     now = datetime.datetime.now()
     current_date = now.strftime("%m-%d-%H-%M")
 
-    assert args.text_criterion in ("MSE","Cosine","Hinge","MaskedCrossEntropy"), 'Invalid Loss Function'
+    assert args.text_criterion in ("MSE","Cosine","Hinge"), 'Invalid Loss Function'
     assert args.cm_criterion in ("MSE","Cosine","Hinge"), 'Invalid Loss Function'
 
     mask = args.common_emb_size
@@ -124,21 +118,6 @@ def main():
     else:
         cuda = False
 
-    model_path = args.model_path + current_date + "/"
-
-    result_path = args.result_path
-    if result_path == "NONE":
-        result_path = model_path + "results/"
-
-
-    if not os.path.exists(result_path):
-        os.makedirs(result_path)
-    if not os.path.exists(model_path):
-        os.makedirs(model_path)
-    #</editor-fold>
-
-    # <editor-fold desc="Image Preprocessing">
-
     # Image preprocessing //ATTENTION
     # For normalization, see https://github.com/pytorch/vision#models
     transform = transforms.Compose([
@@ -148,9 +127,14 @@ def main():
         transforms.Normalize((0.485, 0.456, 0.406),
                              (0.229, 0.224, 0.225))])
 
-    #</editor-fold>
+    result_path = args.result_path
+    model_path = args.model_path + current_date + "/"
 
-    # <editor-fold desc="Creating Embeddings">
+    if not os.path.exists(result_path):
+        os.makedirs(result_path)
+    if not os.path.exists(model_path):
+        os.makedirs(model_path)
+
 
 
     # Load vocabulary wrapper.
@@ -180,11 +164,6 @@ def main():
     # if args.fixed_embeddings == "true":
         # glove_emb.weight.requires_grad = False
 
-
-    # </editor-fold>
-
-    # <editor-fold desc="Data-Loaders">
-
     # Build data loader
     print("Building Data Loader For Test Set...")
     data_loader = get_loader(args.image_dir, args.caption_path, vocab,
@@ -195,10 +174,6 @@ def main():
     val_loader = get_loader(args.valid_dir, args.valid_caption_path, vocab,
                              transform, args.batch_size,
                              shuffle=True, num_workers=args.num_workers)
-
-    # </editor-fold>
-
-    # <editor-fold desc="Network Initialization">
 
     print("Setting up the Networks...")
     encoder_Txt = TextEncoderOld(glove_emb, num_layers=1, bidirectional=False, hidden_size=args.hidden_size)
@@ -217,9 +192,6 @@ def main():
         encoder_Img = encoder_Img.cuda()
         decoder_Txt = decoder_Txt.cuda()
 
-    # </editor-fold>
-
-    # <editor-fold desc="Losses">
 
     # Losses and Optimizers
     print("Setting up the Objective Functions...")
@@ -246,32 +218,26 @@ def main():
         cm_criterion = cm_criterion.cuda()
     # txt_criterion = nn.CrossEntropyLoss()
 
-    # </editor-fold>
-
-    # <editor-fold desc="Optimizers">
     #     gen_params = chain(generator_A.parameters(), generator_B.parameters())
     print("Setting up the Optimizers...")
     # img_params = chain(decoder_Img.parameters(), encoder_Img.parameters())
     # txt_params = chain(decoder_Txt.decoder.parameters(), encoder_Txt.encoder.parameters())
-    # img_params = list(decoder_Img.parameters()) + list(encoder_Img.parameters())
-    # txt_params = list(decoder_Txt.decoder.parameters()) + list(encoder_Txt.encoder.parameters())
+    img_params = list(decoder_Img.parameters()) + list(encoder_Img.parameters())
+    txt_params = list(decoder_Txt.decoder.parameters()) + list(encoder_Txt.encoder.parameters())
 
     # ATTENTION: Check betas and weight decay
     # ATTENTION: Check why valid_params fails on image networks with out of memory error
 
-    # img_optim = optim.Adam(img_params, lr=0.0001, betas=(0.5, 0.999), weight_decay=0.00001)
-    # txt_optim = optim.Adam(valid_params(txt_params), lr=0.0001,betas=(0.5, 0.999), weight_decay=0.00001)
-    img_enc_optim = optim.Adam(encoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
-    img_dec_optim = optim.Adam(decoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
-    txt_enc_optim = optim.Adam(valid_params(encoder_Txt.encoder.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
-    txt_dec_optim = optim.Adam(valid_params(decoder_Txt.decoder.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
+    img_optim = optim.Adam(img_params, lr=0.0001, betas=(0.5, 0.999), weight_decay=0.00001)
+    txt_optim = optim.Adam(valid_params(txt_params), lr=0.0001,betas=(0.5, 0.999), weight_decay=0.00001)
+    # img_enc_optim = optim.Adam(encoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
+    # img_dec_optim = optim.Adam(decoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
+    # txt_enc_optim = optim.Adam(valid_params(encoder_Txt.encoder.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
+    # txt_dec_optim = optim.Adam(valid_params(decoder_Txt.decoder.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
 
-    # </editor-fold desc="Optimizers">
 
     train_images = False # Reverse 2
     for epoch in range(args.num_epochs):
-
-        # <editor-fold desc = "Epoch Initialization"?
 
         # TRAINING TIME
         print('EPOCH ::: TRAINING ::: ' + str(epoch + 1))
@@ -290,15 +256,12 @@ def main():
         encoder_Txt.encoder.train()
         decoder_Txt.decoder.train()
 
-        # <\editor-fold desc = "Epoch Initialization"?
 
         train_images = not train_images
         for i, (images, captions, lengths) in enumerate(data_loader):
-
             # ATTENTION REMOVE
-            if i == len(data_loader)-1:
+            if i == 6450:
                 break
-
 
             # Set mini-batch dataset
             images = to_var(images)
@@ -314,34 +277,29 @@ def main():
 
             # Forward, Backward and Optimize
             # img_optim.zero_grad()
-            img_dec_optim.zero_grad()
-            img_enc_optim.zero_grad()
-            # encoder_Img.zero_grad()
-            # decoder_Img.zero_grad()
+            # img_dec_optim.zero_grad()
+            # img_enc_optim.zero_grad()
+            encoder_Img.zero_grad()
+            decoder_Img.zero_grad()
 
             # txt_params.zero_grad()
-            txt_dec_optim.zero_grad()
-            txt_enc_optim.zero_grad()
-            # encoder_Txt.encoder.zero_grad()
-            # decoder_Txt.decoder.zero_grad()
+            # txt_dec_optim.zero_grad()
+            # txt_enc_optim.zero_grad()
+            encoder_Txt.encoder.zero_grad()
+            decoder_Txt.decoder.zero_grad()
 
             # Image Auto_Encoder Forward
-
-            # <editor-fold desc = "Image AE"?
 
             img_encoder_outputs, Iz  = encoder_Img(images)
 
             IzI = decoder_Img(img_encoder_outputs)
 
             img_rc_loss = img_criterion(IzI,images)
-            # </editor-fold desc = "Image AE"?
 
 
-            # <editor-fold desc = "Seq2Seq AE"?
             # Text Auto Encoder Forward
 
             # target = target[:-1] # exclude last target from inputs
-
 
             captions = captions[:-1,:,:]
             lengths = lengths - 1
@@ -362,7 +320,9 @@ def main():
             Tz = encoder_outputs
             TzT = decoder_outputs
 
-            # </editor-fold desc = "Seq2Seq AE"?
+
+            # print("Decoder Output" ,TzT.size())
+            # print("Captions: ",glove_emb(captions).size())
 
             if args.text_criterion == 'MSE':
                 txt_rc_loss = txt_criterion(TzT,glove_emb(captions))
@@ -426,11 +386,11 @@ def main():
 
 
             # Computes the loss to be back-propagated
-            rate = 0.8
-            img_loss = img_rc_loss * (1 - rate) + cm_loss * rate
-            txt_loss = txt_rc_loss * (1 - rate) + cm_loss * rate
-            # txt_loss = txt_rc_loss + 0.1 * cm_loss
-            # img_loss = img_rc_loss + cm_loss
+            # rate = 0.2
+            # img_loss = img_rc_loss * (1 - rate) + cm_loss * rate
+            # txt_loss = txt_rc_loss * (1 - rate) + cm_loss * rate
+            txt_loss = txt_rc_loss + 0.1 * cm_loss
+            img_loss = img_rc_loss + cm_loss
 
             txt_losses.update(txt_rc_loss.data[0],args.batch_size)
             img_losses.update(img_rc_loss.data[0],args.batch_size)
@@ -441,17 +401,17 @@ def main():
                 # Image Network Training and Backpropagation
 
                 img_loss.backward()
-                # img_optim.step()
-                img_dec_optim.step()
-                img_enc_optim.step()
+                img_optim.step()
+                # img_dec_optim.step()
+                # img_enc_optim.step()
 
             else:
                 # Text Nextwork Training & Back Propagation
 
                 txt_loss.backward()
-                # txt_optim.step()
-                txt_dec_optim.step()
-                txt_enc_optim.step()
+                txt_optim.step()
+                # txt_dec_optim.step()
+                # txt_enc_optim.step()
 
 
             if i % args.image_save_interval == 0:
@@ -486,7 +446,6 @@ def main():
                         cm_l=cm_losses.avg,
                         )
             bar.next()
-
         bar.finish()
 
         # Save the models

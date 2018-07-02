@@ -39,7 +39,7 @@ parser.add_argument('--epoch_size', type=int, default=5000, help='Set epoch size
 parser.add_argument('--result_path', type=str, default='./results/',
                     help='Set the path the result images will be saved.')
 
-parser.add_argument('--image_size', type=int, default=256, help='Image size. 64 for every experiment in the paper')
+parser.add_argument('--image_size', type=int, default=70, help='Image size. 64 for every experiment in the paper')
 
 parser.add_argument('--update_interval', type=int, default=3, help='')
 parser.add_argument('--log_interval', type=int, default=50, help='Print loss values every log_interval iterations.')
@@ -51,7 +51,7 @@ parser.add_argument('--model_save_interval', type=int, default=10000,
 parser.add_argument('--model_path', type=str, default='./models/',
                     help='path for saving trained models')
 
-parser.add_argument('--crop_size', type=int, default=128, #224
+parser.add_argument('--crop_size', type=int, default=64, #224
                     help='size for randomly cropping images')
 parser.add_argument('--vocab_path', type=str, default='./data/vocab.pkl',
                     help='path for vocabulary wrapper')
@@ -191,6 +191,7 @@ def main():
         # suffix = '-{}-05-28-13-14.pkl'.format(epoch+1)
         # mask = 300
 
+        prefix = ""
         suffix = '-{}-05-28-09-23.pkl'.format(epoch+1)
         # suffix = '-{}-05-28-11-35.pkl'.format(epoch+1)
         # suffix = '-{}-05-28-16-45.pkl'.format(epoch+1)
@@ -202,17 +203,23 @@ def main():
         # suffix = '-{}-05-28-15-39.pkl'.format(epoch+1)
         # suffix = '-{}-05-29-12-11.pkl'.format(epoch+1)
         # suffix = '-{}-05-29-12-14.pkl'.format(epoch+1)
-        # suffix = '-{}-05-29-14-24.pkl'.format(epoch+1)
+        # suffix = '-{}-05-29-14-24.pkl'.format(epoch+1) #best
         # suffix = '-{}-05-29-15-43.pkl'.format(epoch+1)
-        suffix = '-{}-06-29-18-31.pkl'.format(epoch+1)
+        date = "06-30-14-22"
+        date = "07-01-12-49" #bad
+        date = "07-01-16-38"
+        date = "07-01-18-16"
+        date = "07-02-15-38"
+        prefix = "{}/".format(date)
+        suffix = '-{}-{}.pkl'.format(epoch+1,date)
         mask = 100
 
         print(suffix)
         try:
             encoder_Img.load_state_dict(torch.load(os.path.join(args.model_path,
-                                    'encoder-img' + suffix)))
+                                    prefix + 'encoder-img' + suffix)))
             encoder_Txt.load_state_dict(torch.load(os.path.join(args.model_path,
-                                    'encoder-txt' + suffix)))
+                                    prefix + 'encoder-txt' + suffix)))
         except FileNotFoundError:
             print("\n\033[91mFile not found...\nTerminating Validation Procedure!")
             break
@@ -229,8 +236,9 @@ def main():
         loader = val_loader
         bar = Bar('Computing Validation Set Embeddings', max=len(loader))
 
+        limit = 12
         for i, (images, captions, lengths) in enumerate(loader):
-            if i == 16:
+            if i == limit:
                 break
 
             # Set mini-batch dataset
@@ -279,7 +287,7 @@ def main():
         bar.finish()
 
 
-        a = [((result_embeddings[0][i] - result_embeddings[1][i]) ** 2).mean() for i in range(128)]
+        a = [((result_embeddings[0][i] - result_embeddings[1][i]) ** 2).mean() for i in range(limit*args.batch_size)]
         print("Validation MSE: ",np.mean(a))
         print("Validation MSE: ",np.mean(a))
 
@@ -295,7 +303,8 @@ def main():
                 result_embeddings[1] = result_embeddings[1]/result_embeddings[1].sum()
 
             # k = 5
-            neigh = NearestNeighbors(k)
+            neighbors = NearestNeighbors(k, metric = 'cosine')
+            neigh = neighbors
             neigh.fit(result_embeddings[1])
             kneigh = neigh.kneighbors(result_embeddings[0], return_distance=False)
 

@@ -83,91 +83,6 @@ class TextDecoderOld(nn.Module):
             return self.decoder(*input, **kargs)
 
 #source: https://github.com/howardyclo/pytorch-seq2seq-example/blob/master/seq2seq.ipynb
-class TextEncoder(nn.Module):
-    def __init__(self, embedding=None, rnn_type='LSTM', hidden_size=latent_dim, num_layers=1, dropout=0.3, bidirectional=True):
-        super(TextEncoder, self).__init__()
-
-        self.num_layers = num_layers
-        self.dropout = dropout
-        self.bidirectional = bidirectional
-        self.num_directions = 2 if bidirectional else 1
-        self.hidden_size = hidden_size // self.num_directions
-
-        self.embedding = embedding
-        self.word_vec_size = self.embedding.embedding_dim
-
-        self.rnn_type = rnn_type
-        self.rnn = getattr(nn, self.rnn_type)(
-            input_size=self.word_vec_size,
-            hidden_size=self.hidden_size,
-            num_layers=self.num_layers,
-            dropout=self.dropout,
-            bidirectional=self.bidirectional)
-
-    def forward(self, src_seqs, src_lens, hidden=None):
-        """
-        Args:
-            - src_seqs: (max_src_len, batch_size)
-            - src_lens: (batch_size)
-        Returns:
-            - outputs: (max_src_len, batch_size, hidden_size * num_directions)
-            - hidden : (num_layers, batch_size, hidden_size * num_directions)
-        """
-
-        # (max_src_len, batch_size) => (max_src_len, batch_size, word_vec_size)
-        emb = self.embedding(src_seqs)
-
-        # packed_emb:
-        # - data: (sum(batch_sizes), word_vec_size)
-        # - batch_sizes: list of batch sizes
-        packed_emb = nn.utils.rnn.pack_padded_sequence(emb, src_lens, batch_first=True)
-
-        # rnn(gru) returns:
-        # - packed_outputs: shape same as packed_emb
-        # - hidden: (num_layers * num_directions, batch_size, hidden_size)
-        packed_outputs, hidden = self.rnn(packed_emb, hidden)
-
-        # outputs: (max_src_len, batch_size, hidden_size * num_directions)
-        # output_lens == src_lensˇ
-        outputs, output_lens = nn.utils.rnn.pad_packed_sequence(packed_outputs)
-
-        if self.bidirectional:
-            # (num_layers * num_directions, batch_size, hidden_size)
-            # => (num_layers, batch_size, hidden_size * num_directions)
-            hidden = self._cat_directions(hidden)
-
-        return outputs, hidden
-
-    def _cat_directions(self, hidden):
-        """ If the encoder is bidirectional, do the following transformation.
-            Ref: https://github.com/IBM/pytorch-seq2seq/blob/master/seq2seq/models/DecoderRNN.py#L176
-            -----------------------------------------------------------
-            In: (num_layers * num_directions, batch_size, hidden_size)
-            (ex: num_layers=2, num_directions=2)
-
-            layer 1: forward__hidden(1)
-            layer 1: backward_hidden(1)
-            layer 2: forward__hidden(2)
-            layer 2: backward_hidden(2)
-
-            -----------------------------------------------------------
-            Out: (num_layers, batch_size, hidden_size * num_directions)
-
-            layer 1: forward__hidden(1) backward_hidden(1)
-            layer 2: forward__hidden(2) backward_hidden(2)
-        """
-
-        def _cat(h):
-            return torch.cat([h[0:h.size(0):2], h[1:h.size(0):2]], 2)
-
-        if isinstance(hidden, tuple):
-            # LSTM hidden contains a tuple (hidden state, cell state)
-            hidden = tuple([_cat(h) for h in hidden])
-        else:
-            # GRU hidden
-            hidden = _cat(hidden)
-
-        return hidden
 
 
 class DecoderRNN(nn.Module):
@@ -308,27 +223,46 @@ class ImageEncoder(nn.Module):
 
         self.feat_dim = feature_dimension
 
-        self.main = nn.Sequential(
-            nn.Conv2d(3, img_dimension, 4, 2, 1, bias=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(img_dimension, img_dimension * 2, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(img_dimension * 2),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(img_dimension * 2, img_dimension * 4, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(img_dimension * 4),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(img_dimension * 4, img_dimension * 8, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(img_dimension * 8),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(img_dimension * 8, img_dimension * 8, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(img_dimension * 8),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(img_dimension * 8, feature_dimension, 4, 1, 0, bias=False),
-            nn.BatchNorm2d(feature_dimension),
-            nn.LeakyReLU(0.2, inplace=True),
-            # nn.Sigmoid()
-
-        )
+        if img_dimension == 64 :
+            self.main = nn.Sequential(
+                nn.Conv2d(3, img_dimension, 4, 2, 1, bias=False),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Conv2d(img_dimension, img_dimension * 2, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 2),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Conv2d(img_dimension * 2, img_dimension * 4, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 4),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Conv2d(img_dimension * 4, img_dimension * 8, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 8),
+                nn.LeakyReLU(0.2, inplace=True),
+                # nn.Conv2d(img_dimension * 8, img_dimension * 8, 4, 2, 1, bias=False),
+                # nn.BatchNorm2d(img_dimension * 8),
+                # nn.LeakyReLU(0.2, inplace=True),
+                nn.Conv2d(img_dimension * 8, feature_dimension, 4, 1, 0, bias=False),
+                nn.BatchNorm2d(feature_dimension),
+                nn.LeakyReLU(0.2, inplace=True),
+            )
+        else:
+            self.main = nn.Sequential(
+                nn.Conv2d(3, img_dimension, 4, 2, 1, bias=False),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Conv2d(img_dimension, img_dimension * 2, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 2),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Conv2d(img_dimension * 2, img_dimension * 4, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 4),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Conv2d(img_dimension * 4, img_dimension * 8, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 8),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Conv2d(img_dimension * 8, img_dimension * 8, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 8),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Conv2d(img_dimension * 8, feature_dimension, 4, 1, 0, bias=False),
+                nn.BatchNorm2d(feature_dimension),
+                nn.LeakyReLU(0.2, inplace=True),
+            )
 
     def forward(self, input):
         x = self.main(input)
@@ -345,6 +279,103 @@ class ImageDecoder(nn.Module):
             ):
 
         super(ImageDecoder, self).__init__()
+
+        if img_dimension == 64:
+            self.main = nn.Sequential(
+                nn.ConvTranspose2d(feature_dimension, img_dimension * 8, 4, 1, 0, bias=False),
+                nn.BatchNorm2d(img_dimension * 8),
+                nn.ReLU(True),
+                # nn.ConvTranspose2d(img_dimension*8, img_dimension * 8, 4, 2, 1, bias=False),
+                # nn.BatchNorm2d(img_dimension * 8),
+                # nn.ReLU(True),
+                nn.ConvTranspose2d(img_dimension * 8, img_dimension * 4, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 4),
+                nn.ReLU(True),
+                nn.ConvTranspose2d(img_dimension * 4, img_dimension * 2, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 2),
+                nn.ReLU(True),
+                nn.ConvTranspose2d(img_dimension * 2,     img_dimension, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension),
+                nn.ReLU(True),
+                nn.ConvTranspose2d(img_dimension,      3, 4, 2, 1, bias=False),
+                # nn.Sigmoid()
+            )
+        else:
+            self.main = nn.Sequential(
+                nn.ConvTranspose2d(feature_dimension, img_dimension * 8, 4, 1, 0, bias=False),
+                nn.BatchNorm2d(img_dimension * 8),
+                nn.ReLU(True),
+                nn.ConvTranspose2d(img_dimension*8, img_dimension * 8, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 8),
+                nn.ReLU(True),
+                nn.ConvTranspose2d(img_dimension * 8, img_dimension * 4, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 4),
+                nn.ReLU(True),
+                nn.ConvTranspose2d(img_dimension * 4, img_dimension * 2, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension * 2),
+                nn.ReLU(True),
+                nn.ConvTranspose2d(img_dimension * 2,     img_dimension, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(img_dimension),
+                nn.ReLU(True),
+                nn.ConvTranspose2d(img_dimension,      3, 4, 2, 1, bias=False),
+                # nn.Sigmoid()
+            )
+
+    def forward(self, input):
+        return self.main( input )
+
+class ImageVariationalEncoder(nn.Module):
+    def __init__(
+            self,
+            img_dimension=256,
+            feature_dimension = 300
+            ):
+
+        super(ImageVariationalEncoder, self).__init__()
+
+        self.feat_dim = feature_dimension
+
+        self.main = nn.Sequential(
+            nn.Conv2d(3, img_dimension, 4, 2, 1, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(img_dimension, img_dimension * 2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(img_dimension * 2),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(img_dimension * 2, img_dimension * 4, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(img_dimension * 4),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(img_dimension * 4, img_dimension * 8, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(img_dimension * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(img_dimension * 8, img_dimension * 8, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(img_dimension * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(img_dimension * 8, 1024, 4, 1, 0, bias=False),
+            # nn.BatchNorm2d(feature_dimension),
+            nn.LeakyReLU(0.2, inplace=True),
+            # nn.Sigmoid()
+        )
+
+        self.fc1 = nn.Linear(1024, 512)
+        self.mu = nn.Linear(512, feature_dimension)
+        self.std = nn.Linear(512, feature_dimension)
+
+    def forward(self, input):
+        x = self.main(input)
+        h = self.fc1(x.view(-1, 1024))
+
+        # x_cap = self.fc(x_cap)
+        return self.mu(h), self.std(h)
+
+
+class ImageVariationalDecoder(nn.Module):
+    def __init__(
+            self,
+            img_dimension=256,
+            feature_dimension =300
+            ):
+
+        super(ImageVariationalDecoder, self).__init__()
 
         self.main = nn.Sequential(
             nn.ConvTranspose2d(feature_dimension, img_dimension * 8, 4, 1, 0, bias=False),
@@ -363,7 +394,7 @@ class ImageDecoder(nn.Module):
             nn.BatchNorm2d(img_dimension),
             nn.ReLU(True),
             nn.ConvTranspose2d(img_dimension,      3, 4, 2, 1, bias=False),
-            nn.Sigmoid()
+            # nn.Sigmoid()
         )
 
     def forward(self, input):
