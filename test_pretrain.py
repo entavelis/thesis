@@ -2,27 +2,15 @@ import os
 import time
 
 import argparse
-from itertools import chain
 
-import onmt
 from onmt.modules import Embeddings
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.autograd import Variable
-from torch.nn.utils.rnn import pack_padded_sequence
 from torchvision import transforms
-from torchtext import vocab
-from model import *
+from old.model import *
 import pickle
 
 from utils import *
 
-import scipy
-
-from image_caption.build_vocab import Vocabulary
 from image_caption.data_loader import get_loader
 
 from pytorch_classification.utils import Bar, AverageMeter

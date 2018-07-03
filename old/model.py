@@ -351,7 +351,7 @@ class ImageVariationalEncoder(nn.Module):
             nn.BatchNorm2d(img_dimension * 8),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(img_dimension * 8, 1024, 4, 1, 0, bias=False),
-            # nn.BatchNorm2d(feature_dimension),
+            nn.BatchNorm2d(feature_dimension), # Should it be here?
             nn.LeakyReLU(0.2, inplace=True),
             # nn.Sigmoid()
         )

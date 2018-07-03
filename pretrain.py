@@ -24,7 +24,10 @@ from torch.autograd import Variable
 from torch.nn.utils.rnn import pack_padded_sequence
 from torchvision import transforms
 from torchtext import vocab
-from model import *
+
+from models.TextAutoEncoder import *
+from models.ImageAutoEncoder import *
+
 import pickle
 
 from utils import *
@@ -36,6 +39,7 @@ from pytorch_classification.utils import Bar, AverageMeter
 from validate import validate
 
 from sklearn.neighbors import NearestNeighbors
+from tensorboardX import SummaryWriter
 
 # from progressbar import ETA, Bar, Percentage, ProgressBar
 
@@ -44,7 +48,7 @@ from sklearn.neighbors import NearestNeighbors
 #<editor-fold desc="Arguments"
 parser = argparse.ArgumentParser()
 parser.add_argument('--cuda', type=str, default='true', help='Set cuda usage')
-parser.add_argument('--epoch_size', type=int, default=5000, help='Set epoch size')
+parser.add_argument('--epoch_size', type=int, default=20, help='Set epoch size')
 parser.add_argument('--result_path', type=str, default='NONE',
                     help='Set the path the result images will be saved.')
 
@@ -102,22 +106,24 @@ parser.add_argument('--cm_criterion', type=str, default='Cosine')
 parser.add_argument('--cm_loss_weight', type=float, default=0.8)
 
 parser.add_argument('--common_emb_size', type=int, default = 100)
-parser.add_argument('--negative_samples', type=int, default = 5)
+parser.add_argument('--negative_samples', type=int, default = 10)
 
-parser.add_argument('--validate', type=str, default = "false")
+parser.add_argument('--validate', type=str, default = "true")
+parser.add_argument('--comment', type=str, default = "")
 
 #</editor-fold>
 
 def main():
     # global args
     args = parser.parse_args()
+    writer = SummaryWriter()
 
     # <editor-fold desc="Initialization">
 
     now = datetime.datetime.now()
     current_date = now.strftime("%m-%d-%H-%M")
 
-    assert args.text_criterion in ("MSE","Cosine","Hinge","MaskedCrossEntropy"), 'Invalid Loss Function'
+    assert args.text_criterion in ("MSE","Cosine","Hinge","NLLLoss"), 'Invalid Loss Function'
     assert args.cm_criterion in ("MSE","Cosine","Hinge"), 'Invalid Loss Function'
 
     mask = args.common_emb_size
@@ -129,7 +135,7 @@ def main():
     else:
         cuda = False
 
-    model_path = args.model_path + current_date + "/"
+    model_path = args.model_path + current_date + args.comment +  "/"
 
     result_path = args.result_path
     if result_path == "NONE":
@@ -206,8 +212,8 @@ def main():
     # <editor-fold desc="Network Initialization">
 
     print("Setting up the Networks...")
-    encoder_Txt = TextEncoderOld(glove_emb, num_layers=1, bidirectional=False, hidden_size=args.hidden_size)
-    decoder_Txt = TextDecoderOld(glove_emb, num_layers=1, bidirectional=False, hidden_size=args.hidden_size)
+    encoder_Txt = TextEncoder(glove_emb, num_layers=1, bidirectional=False, hidden_size=args.hidden_size)
+    decoder_Txt = TextDecoder(glove_emb, num_layers=1, bidirectional=False, hidden_size=args.hidden_size)
     # decoder_Txt = TextDecoder(encoder_Txt, glove_emb)
     # decoder_Txt = DecoderRNN(glove_emb, hidden_size=args.hidden_size)
 
@@ -295,11 +301,11 @@ def main():
         encoder_Txt.encoder.train()
         decoder_Txt.decoder.train()
 
+        neg_rate = max(0,2*(10-epoch)/10)
         # </editor-fold desc = "Epoch Initialization"?
 
         train_images = not train_images
         for i, (images, captions, lengths) in enumerate(data_loader):
-
             # ATTENTION REMOVE
             if i == len(data_loader)-1:
                 break
@@ -426,7 +432,7 @@ def main():
                     # cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
                     cm_loss += mse_loss(txt, im[perm], sim)
                 else:
-                    cm_loss += cm_criterion(txt, im[perm], \
+                    cm_loss += neg_rate * cm_criterion(txt, im[perm], \
                                            Variable(-1*torch.ones(txt.size(0)).cuda()))/k
 
 
@@ -451,16 +457,16 @@ def main():
 
                 img_loss.backward()
                 # img_optim.step()
-                img_dec_optim.step()
                 img_enc_optim.step()
+                img_dec_optim.step()
 
             else:
                 # Text Nextwork Training & Back Propagation
 
                 txt_loss.backward()
                 # txt_optim.step()
-                txt_dec_optim.step()
                 txt_enc_optim.step()
+                txt_dec_optim.step()
 
             # </editor-fold desc = "Back Propagation">
 
@@ -520,10 +526,19 @@ def main():
                                 'encoder-txt-%d-' %(epoch+1)) + current_date + ".pkl")
 
         # </editor-fold desc = "Saving the models"?
-
+        # <editor-fold desc = "Validation">
         if args.validate == "true":
+            print("Train Set")
+            validate(encoder_Img, encoder_Txt, data_loader, mask, 10)
+
+            print("Test Set")
             validate(encoder_Img, encoder_Txt, val_loader, mask, 10)
 
+        # </editor-fold desc = "Validation">
+
+        writer.add_scalars('data/scalar_group', {'Image_RC': img_losses.avg,
+                                                 'Text_RC': txt_losses.avg,
+                                                 'CM_loss': cm_losses.avg}, epoch)
 
 if __name__ == "__main__":
     main()
