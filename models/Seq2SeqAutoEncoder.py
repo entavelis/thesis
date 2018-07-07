@@ -1,7 +1,8 @@
 from onmt import Models
 import torch
 import torch.nn as nn
-import torch.functional as F
+import torch.nn.functional as F
+from torch.autograd import Variable
 
 class TextEncoder(nn.Module):
     def __init__(
@@ -14,16 +15,17 @@ class TextEncoder(nn.Module):
         super(TextEncoder, self).__init__()
         self.hidden_size = hidden_size
         self.embedding = embedding
-        self.gru = nn.GRU(hidden_size, hidden_size, num_layers= num_layers, bidirectional= bidirectional)
+        self.gru = nn.GRU(hidden_size, hidden_size, num_layers= num_layers, bidirectional= bidirectional, \
+                          batch_first= True)
 
     def forward(self, input, hidden):
-        embedded = self.embedding(input).view(1, 1, -1)
+        embedded = self.embedding(input)
         output = embedded
         output, hidden = self.gru(output, hidden)
         return output, hidden
 
-    def initHidden(self):
-        return torch.zeros(1, 1, self.hidden_size).cuda
+    def initHidden(self, batch_size):
+        return Variable(torch.zeros(1,batch_size, self.hidden_size).cuda())
 
 class TextDecoder(nn.Module):
     def __init__(
@@ -39,18 +41,20 @@ class TextDecoder(nn.Module):
         self.hidden_size = hidden_size
 
         self.embedding = embeddings
-        self.gru = nn.GRU(hidden_size, hidden_size, num_layers= num_layers, bidirectional = bidirectional)
+        self.gru = nn.GRU(hidden_size, hidden_size, num_layers= num_layers, bidirectional = bidirectional, \
+                          batch_first= True)
         self.out = nn.Linear(hidden_size, output_size)
         self.softmax = nn.LogSoftmax(dim=1)
 
     def forward(self, input, hidden):
-        output = self.embedding(input).view(1, 1, -1)
-        output = F.relu(output)
+        output = self.embedding(input)
+        # output = self.relu(output)
         output, hidden = self.gru(output, hidden)
-        output = self.softmax(self.out(output[0]))
+        output = self.out(output[:,0])
+        # output = self.softmax(self.out(output))
         return output, hidden
 
     def initHidden(self):
-        return torch.zeros(1, 1, self.hidden_sized)
+        return torch.zeros(1, 1, self.hidden_size).cuda()
 
 

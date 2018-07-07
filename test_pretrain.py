@@ -17,6 +17,7 @@ from pytorch_classification.utils import Bar, AverageMeter
 
 from sklearn.neighbors import NearestNeighbors
 
+from image_caption.build_vocab import Vocabulary
 
 
 # from progressbar import ETA, Bar, Percentage, ProgressBar
@@ -198,6 +199,7 @@ def main():
         date = "07-01-16-38"
         date = "07-01-18-16"
         date = "07-02-15-38"
+        date = "07-07-17-11"
         prefix = "{}/".format(date)
         suffix = '-{}-{}.pkl'.format(epoch+1,date)
         mask = 100
@@ -212,39 +214,6 @@ def main():
             print("\n\033[91mFile not found...\nTerminating Validation Procedure!")
             break
 
-
-        # Set Evaluation Mode
-        encoder_Img.eval()
-
-        encoder_Txt.encoder.eval()
-
-        batch_time = AverageMeter()
-        end = time.time()
-
-        loader = val_loader
-        bar = Bar('Computing Validation Set Embeddings', max=len(loader))
-
-        limit = 12
-        for i, (images, captions, lengths) in enumerate(loader):
-            if i == limit:
-                break
-
-            # Set mini-batch dataset
-            images = to_var(images)
-            captions = to_var(captions)
-
-            captions = captions.transpose(0,1).unsqueeze(2)
-            lengths = torch.LongTensor(lengths)
-
-            _, img_emb = encoder_Img(images)
-
-            txt_emb, _ = encoder_Txt(captions, lengths)
-
-            img_emb = img_emb.narrow(1,0,mask)
-            txt_emb = txt_emb.narrow(2,0,mask)
-            # current_embeddings = torch.cat( \
-            #         (txt_emb.transpose(0,1).data,img_emb.unsqueeze(1).data)
-            #         , 1)
             current_embeddings = np.concatenate( \
                 (txt_emb.cpu().data.numpy(),\
                  img_emb.unsqueeze(0).cpu().data.numpy())\

@@ -212,8 +212,8 @@ def main():
     # <editor-fold desc="Network Initialization">
 
     print("Setting up the Networks...")
-    encoder_Txt = TextEncoder(glove_emb, num_layers=1, bidirectional=False, hidden_size=args.hidden_size)
-    decoder_Txt = TextDecoder(glove_emb, num_layers=1, bidirectional=False, hidden_size=args.hidden_size)
+    encoder_Txt = TextEncoder(glove_emb, num_layers=1, bidirectional=True, hidden_size=args.hidden_size)
+    decoder_Txt = TextDecoder(glove_emb, num_layers=1, bidirectional=True, hidden_size=args.hidden_size)
     # decoder_Txt = TextDecoder(encoder_Txt, glove_emb)
     # decoder_Txt = DecoderRNN(glove_emb, hidden_size=args.hidden_size)
 
