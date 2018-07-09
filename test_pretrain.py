@@ -199,7 +199,7 @@ def main():
         date = "07-01-16-38"
         date = "07-01-18-16"
         date = "07-02-15-38"
-        date = "07-07-17-11"
+        date = "07-08-15-36"
         prefix = "{}/".format(date)
         suffix = '-{}-{}.pkl'.format(epoch+1,date)
         mask = 100
