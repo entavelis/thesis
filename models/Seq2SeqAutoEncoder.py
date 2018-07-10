@@ -11,17 +11,22 @@ class TextEncoder(nn.Module):
             hidden_size = 300,
             num_layers = 1,
             bidirectional = True,
+            model = "GRU"
             ):
         super(TextEncoder, self).__init__()
         self.hidden_size = hidden_size
         self.embedding = embedding
-        self.gru = nn.GRU(hidden_size, hidden_size, num_layers= num_layers, bidirectional= bidirectional, \
+        if model == "GRU":
+            self.rnn = nn.GRU(embedding.embedding_dim, hidden_size, num_layers= num_layers, bidirectional= bidirectional, \
                           batch_first= True)
+        else:
+            self.rnn = nn.LSTM(embedding.embedding_dim, hidden_size, num_layers= num_layers, bidirectional= bidirectional, \
+                               batch_first= True)
 
     def forward(self, input, hidden):
         embedded = self.embedding(input)
         output = embedded
-        output, hidden = self.gru(output, hidden)
+        output, hidden = self.rnn(output, hidden)
         return output, hidden
 
     def initHidden(self, batch_size):
@@ -34,14 +39,19 @@ class TextDecoder(nn.Module):
             output_size,
             num_layers = 1,
             hidden_size = 300,
-            bidirectional = False
+            bidirectional = False,
+            model = "GRU"
             ):
         super(TextDecoder,self).__init__()
 
         self.hidden_size = hidden_size
 
         self.embedding = embeddings
-        self.gru = nn.GRU(hidden_size, hidden_size, num_layers= num_layers, bidirectional = bidirectional, \
+        if model == "GRU":
+            self.rnn = nn.GRU(embeddings.embedding_dim, hidden_size, num_layers= num_layers, bidirectional = bidirectional, \
+                          batch_first= True)
+        else:
+            self.rnn = nn.LSTM(embeddings.embedding_dim, hidden_size, num_layers= num_layers, bidirectional = bidirectional, \
                           batch_first= True)
         self.out = nn.Linear(hidden_size, output_size)
         self.softmax = nn.LogSoftmax(dim=1)
@@ -49,7 +59,7 @@ class TextDecoder(nn.Module):
     def forward(self, input, hidden):
         output = self.embedding(input)
         # output = self.relu(output)
-        output, hidden = self.gru(output, hidden)
+        output, hidden = self.rnn(output, hidden)
         output = self.out(output[:,0])
         # output = self.softmax(self.out(output))
         return output, hidden
