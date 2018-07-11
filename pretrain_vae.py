@@ -25,8 +25,8 @@ from torch.nn.utils.rnn import pack_padded_sequence
 from torchvision import transforms
 from torchtext import vocab
 
-from models.ImageAutoEncoder import *
-from models.Seq2SeqAutoEncoder import *
+from models.ImgVAE import *
+from models.SeqVAE import *
 
 import pickle
 
@@ -36,7 +36,7 @@ from image_caption.build_vocab import Vocabulary
 from image_caption.data_loader import get_loader
 
 from pytorch_classification.utils import Bar, AverageMeter
-from validate import validate
+from vae_validate import validate
 
 from sklearn.neighbors import NearestNeighbors
 
@@ -88,7 +88,7 @@ parser.add_argument('--save_step', type=int, default=1000,
 
 # Model parameters
 parser.add_argument('--embedding_size', type=int, default=300)
-parser.add_argument('--hidden_size', type=int, default=512,
+parser.add_argument('--hidden_size', type=int, default=300,
                     help='dimension of lstm hidden states')
 parser.add_argument('--num_layers', type=int, default=1,
                     help='number of layers in lstm')
@@ -105,7 +105,7 @@ parser.add_argument('--cm_criterion', type=str, default='Cosine')
 parser.add_argument('--cm_loss_weight', type=float, default=0.8)
 
 parser.add_argument('--common_emb_percentage', type=int, default = 0.25)
-parser.add_argument('--negative_samples', type=int, default = 10)
+parser.add_argument('--negative_samples', type=int, default = 5)
 
 parser.add_argument('--validate', type=str, default = "true")
 parser.add_argument('--load-model', type=str, default = "NONE")
@@ -134,10 +134,10 @@ def main():
         cuda = False
 
     if args.load_model == "NONE":
-        keep_loading = True
+        keep_loading = False
         model_path = args.model_path + current_date + "/"
     else:
-        keep_loading = False
+        keep_loading = True
         model_path = args.model_path + args.load_model + "/"
 
     result_path = args.result_path
@@ -217,21 +217,12 @@ def main():
     # <editor-fold desc="Network Initialization">
 
     print("Setting up the Networks...")
-    encoder_Txt = TextEncoder(glove_emb, num_layers=1, bidirectional=False, hidden_size=args.hidden_size)
-    decoder_Txt = TextDecoder(glove_emb, len(vocab),  num_layers=1, bidirectional=False, hidden_size=args.hidden_size)
-    # decoder_Txt = TextDecoder(encoder_Txt, glove_emb)
-    # decoder_Txt = DecoderRNN(glove_emb, hidden_size=args.hidden_size)
-
-
-    encoder_Img = ImageEncoder(img_dimension=args.crop_size,feature_dimension= args.hidden_size)
-    decoder_Img = ImageDecoder(img_dimension=args.crop_size, feature_dimension= args.hidden_size)
+    vae_Txt = SentenceVAE(glove_emb, len(vocab), hidden_size=args.hidden_size)
+    vae_Img = ImgVAE(img_dimension=args.crop_size, feature_dimension=args.hidden_size)
 
     if cuda:
-        encoder_Txt = encoder_Txt.cuda()
-        decoder_Img = decoder_Img.cuda()
-
-        encoder_Img = encoder_Img.cuda()
-        decoder_Txt = decoder_Txt.cuda()
+        vae_Txt = vae_Txt.cuda()
+        vae_Img = vae_Img.cuda()
 
     # </editor-fold>
 
@@ -267,27 +258,16 @@ def main():
     # </editor-fold>
 
     # <editor-fold desc="Optimizers">
-    #     gen_params = chain(generator_A.parameters(), generator_B.parameters())
     print("Setting up the Optimizers...")
-    # img_params = chain(decoder_Img.parameters(), encoder_Img.parameters())
-    # txt_params = chain(decoder_Txt.decoder.parameters(), encoder_Txt.encoder.parameters())
-    # img_params = list(decoder_Img.parameters()) + list(encoder_Img.parameters())
-    # txt_params = list(decoder_Txt.decoder.parameters()) + list(encoder_Txt.encoder.parameters())
 
-    # ATTENTION: Check betas and weight decay
-    # ATTENTION: Check why valid_params fails on image networks with out of memory error
-
-    # img_optim = optim.Adam(img_params, lr=0.0001, betas=(0.5, 0.999), weight_decay=0.00001)
-    # txt_optim = optim.Adam(valid_params(txt_params), lr=0.0001,betas=(0.5, 0.999), weight_decay=0.00001)
-    img_enc_optim = optim.Adam(encoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
-    img_dec_optim = optim.Adam(decoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
-    txt_enc_optim = optim.Adam(valid_params(encoder_Txt.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
-    txt_dec_optim = optim.Adam(valid_params(decoder_Txt.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
+    img_optim = optim.Adam(vae_Img.parameters(), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
+    txt_optim = optim.Adam(vae_Txt.parameters(), lr=args.learning_rate)
 
     # </editor-fold desc="Optimizers">
 
-    train_images = False # Reverse 2
+    train_images = True # Reverse 2
 
+    step = 0
     for epoch in range(args.num_epochs):
 
         # <editor-fold desc = "Epoch Initialization"?
@@ -305,14 +285,10 @@ def main():
         if keep_loading:
             suffix = "-" + str(epoch) + "-" + args.load_model + ".pkl"
             try:
-                encoder_Img.load_state_dict(torch.load(os.path.join(args.model_path,
-                                        'encoder-img' + suffix)))
-                encoder_Txt.load_state_dict(torch.load(os.path.join(args.model_path,
-                                        'encoder-txt' + suffix)))
-                decoder_Img.load_state_dict(torch.load(os.path.join(args.model_path,
-                                        'decoder-img' + suffix)))
-                decoder_Txt.load_state_dict(torch.load(os.path.join(args.model_path,
-                                        'decoder-txt' + suffix)))
+                vae_Img.load_state_dict(torch.load(os.path.join(args.model_path,
+                                        'vae-img' + suffix)))
+                vae_Txt.load_state_dict(torch.load(os.path.join(args.model_path,
+                                        'vae-txt' + suffix)))
             except FileNotFoundError:
                 print("Didn't find any models switching to training")
                 keep_loading = False
@@ -320,15 +296,13 @@ def main():
         if not keep_loading:
 
             # Set training mode
-            encoder_Img.train()
-            decoder_Img.train()
+            vae_Txt.train()
+            vae_Img.train()
 
-            encoder_Txt.train()
-            decoder_Txt.train()
 
             # </editor-fold desc = "Epoch Initialization"?
 
-            train_images = not train_images
+            # train_images = not train_images
             for i, (images, captions, lengths) in enumerate(data_loader):
 
                 if i == len(data_loader)-1:
@@ -341,117 +315,31 @@ def main():
                 images = to_var(images)
                 captions = to_var(captions)
 
-                # target = pack_padded_sequence(captions, lengths, batch_first=True)[0]
-                # captions, lengths = pad_sequences(captions, lengths)
-                # images = torch.FloatTensor(images)
-
-                captions = captions.transpose(0,1).unsqueeze(2)
+                # captions = captions.transpose(0,1).unsqueeze(2)
                 lengths = to_var(torch.LongTensor(lengths))            # print(captions.size())
 
 
                 # Forward, Backward and Optimize
-                # img_optim.zero_grad()
-                img_dec_optim.zero_grad()
-                img_enc_optim.zero_grad()
-                # encoder_Img.zero_grad()
-                # decoder_Img.zero_grad()
-
-                # txt_params.zero_grad()
-                txt_dec_optim.zero_grad()
-                txt_enc_optim.zero_grad()
-                # encoder_Txt.encoder.zero_grad()
-                # decoder_Txt.decoder.zero_grad()
+                img_optim.zero_grad()
+                txt_optim.zero_grad()
 
                 # </editor-fold desc = "Training Parameters Initiliazation"?
 
-                # <editor-fold desc = "Image AE"?
+                # <editor-fold desc = "Forward passes"?
 
-                # Image Auto_Encoder Forward
-                mu, logvar  = encoder_Img(images)
+                img_out, img_mu, img_logv, img_z = vae_Img(images)
+                txt_out, txt_mu, txt_logv, txt_z = vae_Txt(captions, lengths)
 
-                Iz = logvar
-                # Iz = reparametrize(mu, logvar)
-                IzI = decoder_Img(mu)
+                img_rc_loss = img_vae_loss(img_out, images, img_mu, img_logv) / (args.batch_size * args.crop_size**2)
 
-                img_rc_loss = img_criterion(IzI,images)
-                # </editor-fold desc = "Image AE"?
+                NLL_loss, KL_loss, KL_weight = seq_vae_loss(txt_out, captions,
+                                                       lengths, txt_mu, txt_logv, "logistic", step, 0.0025,
+                                                       2500)
 
-                # <editor-fold desc = "Seq2Seq AE"?
-                # Text Auto Encoder Forward
+                txt_rc_loss = (NLL_loss + KL_weight * KL_loss) / torch.sum(lengths).float()
 
-                # target = target[:-1] # exclude last target from inputs
-
-                teacher_forcing_ratio = 0.5
-
-                encoder_hidden = encoder_Txt.initHidden(args.batch_size)
-
-                input_length = captions.size(0)
-                target_length = captions.size(0)
-
-                if cuda:
-                    encoder_outputs = Variable(torch.zeros(input_length, args.batch_size, args.hidden_size).cuda())
-                    decoder_outputs = Variable(torch.zeros(input_length, args.batch_size, len(vocab)).cuda())
-                else:
-                    encoder_outputs = Variable(torch.zeros(input_length, args.batch_size, args.hidden_size))
-                    decoder_outputs = Variable(torch.zeros(input_length, args.batch_size, len(vocab)))
-
-                txt_rc_loss = 0
-
-                for ei in range(input_length):
-                    encoder_output, encoder_hidden = encoder_Txt(
-                    captions[ei,:], encoder_hidden)
-                    encoder_outputs[ei] = encoder_output
-
-                decoder_input = Variable(torch.LongTensor([vocab.word2idx['<start>']])).cuda()\
-                    .repeat(args.batch_size,1)
-
-
-                decoder_hidden = encoder_hidden
-
-                use_teacher_forcing = True #if np.random.random() < teacher_forcing_ratio else False
-
-                if use_teacher_forcing:
-                    # Teacher forcing: Feed the target as the next input
-                    for di in range(target_length-1):
-                        decoder_output, decoder_hidden = decoder_Txt(
-                        decoder_input, decoder_hidden) #, encoder_outputs)
-                # txt_rc_loss += txt_criterion(decoder_output, captions[di].unsqueeze(1))
-
-                        decoder_outputs[di] = decoder_output
-
-                        decoder_input = captions[di+1]  # Teacher forcing
-
-                else:
-                # Without teacher forcing: use its own predictions as the next input
-                    for di in range(target_length-1):
-                        decoder_outputs, decoder_hidden = decoder_Txt(
-                        decoder_input, decoder_hidden)
-                        topv, topi = decoder_output.topk(1)
-                        decoder_input = topi.squeeze().detach()  # detach from history as input
-
-                        txt_rc_loss += txt_criterion(decoder_output, captions[di])
-                # if decoder_input.item() == ("<end>"):
-                #     break
-
-                # Check start tokens etc
-                txt_rc_loss, _, _, _ = masked_cross_entropy(
-                decoder_outputs[:target_length-1].transpose(0, 1).contiguous(),
-                                captions[1:,:,0].transpose(0, 1).contiguous(),
-                                lengths - 1
-                )
-
-
-                # captions = captions[:-1,:,:]
-                # lengths = lengths - 1
-                # dec_state = None
-
-                # Computes Cross-Modal Loss
-
-                # Tz = encoder_hidden[0]
-                Tz = encoder_output[:,0,:]
-
-                txt =  Tz.narrow(1,0,mask)
-                im = Iz.narrow(1,0,mask)
+                txt = txt_z.narrow(1,0,mask)
+                im = img_z.narrow(1,0,mask)
 
                 if args.cm_criterion == 'MSE':
                     # cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
@@ -507,20 +395,18 @@ def main():
                 # Image Network Training and Backpropagation
 
                     img_loss.backward()
-                    # img_optim.step()
-                    img_enc_optim.step()
-                    img_dec_optim.step()
+                    img_optim.step()
 
                 else:
                     # Text Nextwork Training & Back Propagation
-
                     txt_loss.backward()
-                    # txt_optim.step()
-                    txt_enc_optim.step()
-                    txt_dec_optim.step()
+                    txt_optim.step()
 
-                train_images = not train_images
+                    step += 1
+
+                # train_images = not train_images
                 # </editor-fold desc = "Back Propagation">
+
 
                 # <editor-fold desc = "Logging">
                 if i % args.image_save_interval == 0:
@@ -533,17 +419,18 @@ def main():
 
                     for im_idx in range(3):
                         im_or = (images[im_idx].cpu().data.numpy().transpose(1,2,0)/2+.5)*255
-                        im = (IzI[im_idx].cpu().data.numpy().transpose(1,2,0)/2+.5)*255
+                        im = (img_out[im_idx].cpu().data.numpy().transpose(1,2,0)/2+.5)*255
+                        # im = img_out[im_idx].cpu().data.numpy().transpose(1,2,0)*255
 
                         filename_prefix = os.path.join (subdir_path, str(im_idx))
                         scipy.misc.imsave( filename_prefix + '_original.A.jpg', im_or)
                         scipy.misc.imsave( filename_prefix + '.A.jpg', im)
 
 
-                        txt_or = " ".join([vocab.idx2word[c] for c in list(captions[:,im_idx].view(-1).cpu().data)])
-                        txt = " ".join([vocab.idx2word[c] for c in list(decoder_outputs[:,im_idx].view(-1).cpu().data)])
-                        print("Original: ", txt_or)
-                        print(txt)
+                        # txt_or = " ".join([vocab.idx2word[c] for c in captions[im_idx].cpu().data.numpy()])
+                        # txt = " ".join([vocab.idx2word[c] for c in decoder_outputs[im_idx].cpu().data.numpy()])
+                        # print(txt_or)
+                        # print(txt)
 
 
                 # measure elapsed time
@@ -563,7 +450,7 @@ def main():
                     )
                 bar.next()
 
-                                                                         # </editor-fold desc = "Logging">
+            # </editor-fold desc = "Logging">
 
             bar.finish()
 
@@ -571,23 +458,17 @@ def main():
             # Save the models
             print('\n')
             print('Saving the models in {}...'.format(model_path))
-            torch.save(decoder_Img.state_dict(),
+            torch.save(vae_Img.state_dict(),
                        os.path.join(model_path,
-                                    'decoder-img-%d-' %(epoch+1)) + current_date + ".pkl")
-            torch.save(encoder_Img.state_dict(),
+                                    'vae-img-%d-' %(epoch+1)) + current_date + ".pkl")
+            torch.save(vae_Txt.state_dict(),
                        os.path.join(model_path,
-                                    'encoder-img-%d-' %(epoch+1)) + current_date + ".pkl")
-            torch.save(decoder_Txt.state_dict(),
-                       os.path.join(model_path,
-                                    'decoder-txt-%d-' %(epoch+1)) + current_date + ".pkl")
-            torch.save(encoder_Txt.state_dict(),
-                       os.path.join(model_path,
-                                    'encoder-txt-%d-' %(epoch+1)) + current_date + ".pkl")
+                                    'vae-txt-%d-' %(epoch+1)) + current_date + ".pkl")
 
             # </editor-fold desc = "Saving the models"?
 
         if args.validate == "true":
-            validate(encoder_Img, encoder_Txt, val_loader, mask, 10)
+            validate(vae_Img, vae_Txt, val_loader, mask, 10)
 
 
 if __name__ == "__main__":
