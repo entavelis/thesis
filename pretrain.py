@@ -212,6 +212,10 @@ def main():
 
             loss = img_rc_loss + txt_rc_loss
 
+            txt_losses.update(txt_rc_loss.data[0],args.batch_size)
+            img_losses.update(img_rc_loss.data[0],args.batch_size)
+            # cm_losses.update(cm_loss.data[0], args.batch_size)
+
             model_trainer.backpropagate(loss)
             # measure elapsed time
             batch_time.update(time.time() - end)
