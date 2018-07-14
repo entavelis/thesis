@@ -8,7 +8,9 @@ from pytorch_classification.utils import Bar, AverageMeter
 
 from sklearn.neighbors import NearestNeighbors
 
-def validate(vae_Img, vae_Txt, loader, mask, limit = 1000, metric = "cosine"):
+import os
+
+def validate(vae_Img, vae_Txt, loader, mask, limit = 1000, result_path, metric = "cosine"):
 
         cm_criterion = nn.CosineEmbeddingLoss()
         # VALIDATION TIME
@@ -33,15 +35,15 @@ def validate(vae_Img, vae_Txt, loader, mask, limit = 1000, metric = "cosine"):
             images = to_var(images)
             captions = to_var(captions)
 
-            captions = captions.transpose(0,1).unsqueeze(2)
-            lengths = torch.LongTensor(lengths)
+            # captions = captions.transpose(0,1).unsqueeze(2)
+            lengths = to_var(torch.LongTensor(lengths))            # print(captions.size())
 
             img_out, img_mu, img_logv, img_z = vae_Img(images)
             txt_out, txt_mu, txt_logv, txt_z = vae_Txt(captions, lengths)
 
 
-            img_emb = img_z[:,0,:mask]
-            txt_emb = txt_z[:,0,:mask]
+            img_emb = img_z[:,:mask]
+            txt_emb = txt_z[:,:mask]
 
 
             img_emb = img_emb[:,:mask]
@@ -118,6 +120,13 @@ def validate(vae_Img, vae_Txt, loader, mask, limit = 1000, metric = "cosine"):
             # a = (((result_embeddings[0][0]- result_embeddings[1][0])**2).mean())
             # b = (((result_embeddings[0][0]- result_embeddings[0][34])**2).mean())
             topk.append(np.mean([int(i in nn) for i,nn in enumerate(kneigh)]))
+
+        with open(os.path.join(result_path,"retrieval.csv") , "a") as text_file:
+            text_file.write("{}, {}, {}\n".format(tpk= 100*topk[0],
+                                      tpk2= 100*topk[1],
+                                      tpk3= 100*topk[2]))
+
+
 
         print("Top-{k:},{k2:},{k3:} accuracy for Image Retrieval:\n\n\t\033[95m {tpk: .3f}% \t {tpk2: .3f}% \t {tpk3: .3f}% \n".format(
                       k=kss[0],

@@ -15,11 +15,13 @@ class SentenceVAE(nn.Module):
                 sos_idx = 1,
                 eos_idx = 2,
                 pad_idx = 0,
-                max_sequence_length = 30):
+                max_sequence_length = 30,
+                batch_size = 128):
 
         super().__init__()
         self.tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Tensor
 
+        self.batch_size = batch_size
         self.max_sequence_length = max_sequence_length
         self.sos_idx = sos_idx
         self.eos_idx = eos_idx
@@ -57,21 +59,28 @@ class SentenceVAE(nn.Module):
         self.outputs2vocab = nn.Linear(hidden_size * (2 if bidirectional else 1), vocab_size)
 
     def forward(self, input_sequence, length):
+        input_embedding, sorted_idx, sorted_lengths, packed_input = self.prepare_input(input_sequence, length)
+        mean, logv, z = self.encoder_forward(packed_input)
+        logp = self.decoder_forward(z , input_embedding, sorted_idx, sorted_lengths)
 
-        batch_size = input_sequence.size(0)
+        return logp, mean, logv, z
+
+    def prepare_input(self, input_sequence, length):
         sorted_lengths, sorted_idx = torch.sort(length, descending=True)
         input_sequence = input_sequence[sorted_idx]
-
-        # ENCODER
         input_embedding = self.embedding(input_sequence)
-
         packed_input = rnn_utils.pack_padded_sequence(input_embedding, sorted_lengths.data.tolist(), batch_first=True)
+
+        return input_embedding, sorted_idx, sorted_lengths, packed_input
+
+    def encoder_forward(self, packed_input):
+        # ENCODER
 
         _, hidden = self.encoder_rnn(packed_input)
 
         if self.bidirectional or self.num_layers > 1:
             # flatten hidden state
-            hidden = hidden.view(batch_size, self.hidden_size*self.hidden_factor)
+            hidden = hidden.view(self.batch_size, self.hidden_size*self.hidden_factor)
         else:
             hidden = hidden.squeeze()
 
@@ -80,15 +89,18 @@ class SentenceVAE(nn.Module):
         logv = self.hidden2logv(hidden)
         std = torch.exp(0.5 * logv)
 
-        z = to_var(torch.randn([batch_size, self.latent_size]))
+        z = to_var(torch.randn([self.batch_size, self.latent_size]))
         z = z * std + mean
 
+        return mean, logv, z
+
+    def decoder_forward(self,z, input_embedding, sorted_idx, sorted_lengths):
         # DECODER
         hidden = self.latent2hidden(z)
 
         if self.bidirectional or self.num_layers > 1:
             # unflatten hidden state
-            hidden = hidden.view(self.hidden_factor, batch_size, self.hidden_size)
+            hidden = hidden.view(self.hidden_factor, self.batch_size, self.hidden_size)
         else:
             hidden = hidden.unsqueeze(0)
 
@@ -111,7 +123,7 @@ class SentenceVAE(nn.Module):
         logp = logp.view(b, s, self.embedding.num_embeddings)
 
 
-        return logp, mean, logv, z
+        return logp
 
 
     def inference(self, n=4, z=None):

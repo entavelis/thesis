@@ -51,7 +51,8 @@ parser.add_argument('--epoch_size', type=int, default=20, help='Set epoch size')
 parser.add_argument('--result_path', type=str, default='NONE',
                     help='Set the path the result images will be saved.')
 
-parser.add_argument('--image_size', type=int, default=64, help='Image size. 64 for every experiment in the paper')
+parser.add_argument('--image_size', type=int, default=70,
+                    help='Image size. 64 for every experiment in the paper')
 
 parser.add_argument('--update_interval', type=int, default=3, help='')
 parser.add_argument('--log_interval', type=int, default=50, help='Print loss values every log_interval iterations.')
@@ -87,29 +88,32 @@ parser.add_argument('--save_step', type=int, default=1000,
                     help='step size for saving trained models')
 
 # Model parameters
-parser.add_argument('--embedding_size', type=int, default=300)
-parser.add_argument('--hidden_size', type=int, default=300,
+parser.add_argument('--word_embedding_size', type=int, default=300)
+parser.add_argument('--hidden_size', type=int, default=1024,
                     help='dimension of lstm hidden states')
+parser.add_argument('--latent_size', type=int, default=512,
+                    help='dimension of latent vector z')
 parser.add_argument('--num_layers', type=int, default=1,
                     help='number of layers in lstm')
 
 parser.add_argument('--extra_layers', type=str, default='true')
 parser.add_argument('--fixed_embeddings', type=str, default="true")
-parser.add_argument('--num_epochs', type=int, default=100)
+parser.add_argument('--num_epochs', type=int, default=20)
 parser.add_argument('--batch_size', type=int, default= 128)
 parser.add_argument('--num_workers', type=int, default=2)
-parser.add_argument('--learning_rate', type=float, default=0.001)
+parser.add_argument('--learning_rate', type=float, default=0.0001)
 
 parser.add_argument('--text_criterion', type=str, default='NLLLoss')
 parser.add_argument('--cm_criterion', type=str, default='Cosine')
 parser.add_argument('--cm_loss_weight', type=float, default=0.8)
 
-parser.add_argument('--common_emb_percentage', type=int, default = 0.25)
+parser.add_argument('--common_emb_ratio', type=float, default = 0.33)
 parser.add_argument('--negative_samples', type=int, default = 5)
 
 parser.add_argument('--validate', type=str, default = "true")
 parser.add_argument('--load-model', type=str, default = "NONE")
 
+parser.add_argument('--comment', type=str, default = "test")
 #</editor-fold>
 
 def main():
@@ -117,15 +121,19 @@ def main():
     args = parser.parse_args()
 
     # <editor-fold desc="Initialization">
+    if args.comment == "test":
+        print("WARNING: name is test!!!\n\n")
 
-    now = datetime.datetime.now()
-    current_date = now.strftime("%m-%d-%H-%M")
+
+    # now = datetime.datetime.now()
+    # current_date = now.strftime("%m-%d-%H-%M")
 
     assert args.text_criterion in ("MSE","Cosine","Hinge","NLLLoss"), 'Invalid Loss Function'
     assert args.cm_criterion in ("MSE","Cosine","Hinge"), 'Invalid Loss Function'
 
-    mask = int(args.common_emb_percentage * args.hidden_size)
-    assert mask <= args.hidden_size
+    assert args.common_emb_ratio <= 1.0 and args.common_emb_ratio >= 0
+
+    mask = int(args.common_emb_ratio * args.hidden_size)
 
     cuda = args.cuda
     if cuda == 'true':
@@ -135,7 +143,8 @@ def main():
 
     if args.load_model == "NONE":
         keep_loading = False
-        model_path = args.model_path + current_date + "/"
+        # model_path = args.model_path + current_date + "/"
+        model_path = args.model_path + args.comment + "/"
     else:
         keep_loading = True
         model_path = args.model_path + args.load_model + "/"
@@ -162,8 +171,13 @@ def main():
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize((0.485, 0.456, 0.406),
-                             (0.229, 0.224, 0.225))])
+                             (0.229, 0.224, 0.225))
+        ])
 
+    inv_normalize = transforms.Normalize(
+        mean=[-0.485/0.229, -0.456/0.224, -0.406/0.255],
+        std=[1/0.229, 1/0.224, 1/0.255]
+)
     #</editor-fold>
 
     # <editor-fold desc="Creating Embeddings">
@@ -175,7 +189,7 @@ def main():
         vocab = pickle.load(f)
 
     # Load Embeddings
-    emb_size = args.embedding_size
+    emb_size = args.word_embedding_size
     emb_path = args.embedding_path
     if args.embedding_path[-1]=='/':
         emb_path += 'glove.6B.' + str(emb_size) + 'd.txt'
@@ -217,8 +231,9 @@ def main():
     # <editor-fold desc="Network Initialization">
 
     print("Setting up the Networks...")
-    vae_Txt = SentenceVAE(glove_emb, len(vocab), hidden_size=args.hidden_size)
-    vae_Img = ImgVAE(img_dimension=args.crop_size, feature_dimension=args.hidden_size)
+    vae_Txt = SentenceVAE(glove_emb, len(vocab), hidden_size=args.hidden_size, latent_size=args.latent_size,
+                          batch_size = args.batch_size)
+    vae_Img = ImgVAE(img_dimension=args.crop_size, hidden_size=args.hidden_size, latent_size= args.latent_size)
 
     if cuda:
         vae_Txt = vae_Txt.cuda()
@@ -260,8 +275,8 @@ def main():
     # <editor-fold desc="Optimizers">
     print("Setting up the Optimizers...")
 
-    img_optim = optim.Adam(vae_Img.parameters(), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
-    txt_optim = optim.Adam(vae_Txt.parameters(), lr=args.learning_rate)
+    img_optim = optim.Adam(vae_Img.parameters(), lr=args.learning_rate, betas=(0.5, 0.999), weight_decay=0.00001)
+    txt_optim = optim.Adam(vae_Txt.parameters(), lr=args.learning_rate, betas=(0.5, 0.999), weight_decay=0.00001)
 
     # </editor-fold desc="Optimizers">
 
@@ -338,51 +353,21 @@ def main():
 
                 txt_rc_loss = (NLL_loss + KL_weight * KL_loss) / torch.sum(lengths).float()
 
-                txt = txt_z.narrow(1,0,mask)
-                im = img_z.narrow(1,0,mask)
-
-                if args.cm_criterion == 'MSE':
-                    # cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
-                    cm_loss = mse_loss(txt, im)
-                else:
-                    cm_loss = cm_criterion(txt, im, \
-                    Variable(torch.ones(im.size(0)).cuda()))
-
-                # K - Negative Samples
-                k = args.negative_samples
-                neg_rate = (20-epoch)/20
-                for _ in range(k):
-
-                    if cuda:
-                        perm = torch.randperm(args.batch_size).cuda()
-                    else:
-                        perm = torch.randperm(args.batch_size)
-
-                    # if args.criterion == 'MSE':
-                    #     cm_loss -= mse_loss(txt, im[perm])/k
-                    # else:
-                    #     cm_loss -= cm_criterion(txt, im[perm], \
-                    #                            Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))/k
-
-                    # sim  = (F.cosine_similarity(txt,txt[perm]) - 0.5)/2
-
-                    if args.cm_criterion == 'MSE':
-                        sim  = (F.cosine_similarity(txt,txt[perm]) - 1)/(2*k)
-                        # cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
-                        cm_loss += mse_loss(txt, im[perm], sim)
-                    else:
-                        cm_loss += neg_rate * cm_criterion(txt, im[perm], \
-                        Variable(-1*torch.ones(txt.size(0)).cuda()))/k
+                cm_loss = crossmodal_loss(txt_z, img_z, mask,
+                                          args.cm_criterion, cm_criterion,
+                                          args.negative_samples, epoch)
 
 
-                # cm_loss = Variable(torch.max(torch.FloatTensor([-0.100]).cuda(), cm_loss.data))
+                # cm_loss += crossmodal_loss(txt_logv, img_logv, mask,
+                #                           args.cm_criterion, cm_criterion,
+                #                           args.negative_samples, epoch)
 
 
                 # Computes the loss to be back-propagated
                 img_loss = img_rc_loss * (1 - args.cm_loss_weight) + cm_loss * args.cm_loss_weight
                 txt_loss = txt_rc_loss * (1 - args.cm_loss_weight) + cm_loss * args.cm_loss_weight
-                # txt_loss = txt_rc_loss + 0.1 * cm_loss
-                # img_loss = img_rc_loss + cm_loss
+                # txt_loss = txt_rc_loss +  cm_loss * args.cm_loss_weight
+                # img_loss = img_rc_loss + cm_loss * args.cm_loss_weight
 
                 txt_losses.update(txt_rc_loss.data[0],args.batch_size)
                 img_losses.update(img_rc_loss.data[0],args.batch_size)
@@ -418,6 +403,8 @@ def main():
                         os.makedirs( subdir_path )
 
                     for im_idx in range(3):
+                        # im_or = (inv_normalize([im_idx]).cpu().data.numpy().transpose(1,2,0))*255
+                        # im = (inv_normalize([im_idx]).cpu().data.numpy().transpose(1,2,0))*255
                         im_or = (images[im_idx].cpu().data.numpy().transpose(1,2,0)/2+.5)*255
                         im = (img_out[im_idx].cpu().data.numpy().transpose(1,2,0)/2+.5)*255
                         # im = img_out[im_idx].cpu().data.numpy().transpose(1,2,0)*255
@@ -427,10 +414,13 @@ def main():
                         scipy.misc.imsave( filename_prefix + '.A.jpg', im)
 
 
-                        # txt_or = " ".join([vocab.idx2word[c] for c in captions[im_idx].cpu().data.numpy()])
-                        # txt = " ".join([vocab.idx2word[c] for c in decoder_outputs[im_idx].cpu().data.numpy()])
-                        # print(txt_or)
-                        # print(txt)
+                        txt_or = " ".join([vocab.idx2word[c] for c in captions[im_idx].cpu().data.numpy()])
+                        _, generated = torch.topk(txt_out[im_idx],1)
+                        txt = " ".join([vocab.idx2word[c] for c in generated[:,0].cpu().data.numpy()])
+
+                        with open(filename_prefix + "_captions.txt", "w") as text_file:
+                            text_file.write("Original: %s\n" % txt_or)
+                            text_file.write("Generated: %s" % txt)
 
 
                 # measure elapsed time
@@ -460,10 +450,10 @@ def main():
             print('Saving the models in {}...'.format(model_path))
             torch.save(vae_Img.state_dict(),
                        os.path.join(model_path,
-                                    'vae-img-%d-' %(epoch+1)) + current_date + ".pkl")
+                                    'vae-img-%d-' %(epoch+1)) + ".pkl")
             torch.save(vae_Txt.state_dict(),
                        os.path.join(model_path,
-                                    'vae-txt-%d-' %(epoch+1)) + current_date + ".pkl")
+                                    'vae-txt-%d-' %(epoch+1)) + ".pkl")
 
             # </editor-fold desc = "Saving the models"?
 

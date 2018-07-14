@@ -1,8 +1,6 @@
 # <editor-fold desc="Dependencies">
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
 
 import os
 import time
@@ -11,31 +9,20 @@ import datetime
 import scipy
 
 import argparse
-from itertools import chain
 
-import onmt
 from onmt.modules import Embeddings
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-from torch.autograd import Variable
-from torch.nn.utils.rnn import pack_padded_sequence
 from torchvision import transforms
-from torchtext import vocab
-from model import *
+from old.model import *
 import pickle
 
 from utils import *
 
-from image_caption.build_vocab import Vocabulary
 from image_caption.data_loader import get_loader
 
 from pytorch_classification.utils import Bar, AverageMeter
 from validate import validate
-
-from sklearn.neighbors import NearestNeighbors
 
 # from progressbar import ETA, Bar, Percentage, ProgressBar
 
@@ -98,13 +85,13 @@ parser.add_argument('--num_workers', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.001)
 
 parser.add_argument('--text_criterion', type=str, default='MSE')
-parser.add_argument('--cm_criterion', type=str, default='Cosine')
+parser.add_argument('--cm_criterion', type=str, default='MSE')
 parser.add_argument('--cm_loss_weight', type=float, default=0.8)
 
-parser.add_argument('--common_emb_size', type=int, default = 100)
+parser.add_argument('--mask', type=int, default = 100)
 parser.add_argument('--negative_samples', type=int, default = 5)
 
-parser.add_argument('--validate', type=str, default = "false")
+parser.add_argument('--validate', type=str, default = "true")
 
 #</editor-fold>
 
@@ -117,10 +104,10 @@ def main():
     now = datetime.datetime.now()
     current_date = now.strftime("%m-%d-%H-%M")
 
-    assert args.text_criterion in ("MSE","Cosine","Hinge","MaskedCrossEntropy"), 'Invalid Loss Function'
+    assert args.text_criterion in ("MSE","Cosine","Hinge","NLLLoss"), 'Invalid Loss Function'
     assert args.cm_criterion in ("MSE","Cosine","Hinge"), 'Invalid Loss Function'
 
-    mask = args.common_emb_size
+    mask = args.mask
     assert mask <= args.hidden_size
 
     cuda = args.cuda
@@ -256,16 +243,7 @@ def main():
     # <editor-fold desc="Optimizers">
     #     gen_params = chain(generator_A.parameters(), generator_B.parameters())
     print("Setting up the Optimizers...")
-    # img_params = chain(decoder_Img.parameters(), encoder_Img.parameters())
-    # txt_params = chain(decoder_Txt.decoder.parameters(), encoder_Txt.encoder.parameters())
-    # img_params = list(decoder_Img.parameters()) + list(encoder_Img.parameters())
-    # txt_params = list(decoder_Txt.decoder.parameters()) + list(encoder_Txt.encoder.parameters())
 
-    # ATTENTION: Check betas and weight decay
-    # ATTENTION: Check why valid_params fails on image networks with out of memory error
-
-    # img_optim = optim.Adam(img_params, lr=0.0001, betas=(0.5, 0.999), weight_decay=0.00001)
-    # txt_optim = optim.Adam(valid_params(txt_params), lr=0.0001,betas=(0.5, 0.999), weight_decay=0.00001)
     img_enc_optim = optim.Adam(encoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5, 0.999), weight_decay=0.00001)
     img_dec_optim = optim.Adam(decoder_Img.parameters(), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
     txt_enc_optim = optim.Adam(valid_params(encoder_Txt.encoder.parameters()), lr=args.learning_rate)#betas=(0.5,0.999), weight_decay=0.00001)
@@ -339,60 +317,48 @@ def main():
             # Image Auto_Encoder Forward
             img_encoder_outputs, Iz  = encoder_Img(images)
 
-            IzI = decoder_Img(img_encoder_outputs)
-
-            img_rc_loss = img_criterion(IzI,images)
-            # </editor-fold desc = "Image AE"?
-
-            # <editor-fold desc = "Seq2Seq AE"?
-            # Text Auto Encoder Forward
-
-            # target = target[:-1] # exclude last target from inputs
-
-
             captions = captions[:-1,:,:]
             lengths = lengths - 1
             dec_state = None
 
-            encoder_outputs, memory_bank = encoder_Txt(captions, lengths)
+            txt_encoder_outputs, memory_bank = encoder_Txt(captions, lengths)
 
-            enc_state = \
-                decoder_Txt.decoder.init_decoder_state(captions, memory_bank, encoder_outputs)
 
-            decoder_outputs, dec_state, attns = \
-                decoder_Txt.decoder(captions,
-                             memory_bank,
-                             enc_state if dec_state is None
-                             else dec_state,
-                             memory_lengths=lengths)
+            if train_images:
+                img_encoder_outputs[:,:mask,0,0].data = (txt_encoder_outputs[0,:,:mask].data
+                                                         + img_encoder_outputs[:,:mask,0,0].data)/2
 
-            Tz = encoder_outputs
-            TzT = decoder_outputs
+                IzI = decoder_Img(img_encoder_outputs)
 
-            # </editor-fold desc = "Seq2Seq AE"?
+                rc_loss = img_criterion(IzI,images)
 
-            # <editor-fold desc = "Loss accumulation"?
-            if args.text_criterion == 'MSE':
-                txt_rc_loss = txt_criterion(TzT,glove_emb(captions))
             else:
-                txt_rc_loss = txt_criterion(TzT, glove_emb(captions),\
-                                            Variable(torch.ones(TzT.size(0,1))).cuda())
-            #
-            # for x,y,l in zip(TzT.transpose(0,1),glove_emb(captions).transpose(0,1),lengths):
-            #     if args.criterion == 'MSE':
-            #         # ATTENTION dunno what's the right one
-            #         txt_rc_loss += txt_criterion(x,y)
-            #     else:
-            #         # ATTENTION Fails on last batch
-            #         txt_rc_loss += txt_criterion(x, y, Variable(torch.ones(x.size(0))).cuda())/l
-            #
-            # txt_rc_loss /= captions.size(1)
+                txt_encoder_outputs[0,:,:mask].data = (txt_encoder_outputs[0,:,:mask].data + \
+                                                  img_encoder_outputs[:,:mask,0,0].data)/2
 
+                enc_state = \
+                    decoder_Txt.decoder.init_decoder_state(captions, memory_bank, txt_encoder_outputs)
+
+                decoder_outputs, dec_state, attns = \
+                    decoder_Txt.decoder(captions,
+                                 memory_bank,
+                                 enc_state if dec_state is None
+                                 else dec_state,
+                                 memory_lengths=lengths)
+
+                Tz = txt_encoder_outputs
+                TzT = decoder_outputs
+
+                if args.text_criterion == 'MSE':
+                    rc_loss = txt_criterion(TzT,glove_emb(captions))
+                else:
+                    rc_loss = txt_criterion(TzT, glove_emb(captions),\
+                                                Variable(torch.ones(TzT.size(0,1))).cuda())
 
 
             # Computes Cross-Modal Loss
 
-            Tz = Tz[0]
+            Tz = txt_encoder_outputs[0]
 
             txt =  Tz.narrow(1,0,mask)
             im = Iz.narrow(1,0,mask)
@@ -404,43 +370,12 @@ def main():
                 cm_loss = cm_criterion(txt, im, \
                                        Variable(torch.ones(im.size(0)).cuda()))
 
-            # K - Negative Samples
-            k = args.negative_samples
-            for _ in range(k):
-
-                if cuda:
-                    perm = torch.randperm(args.batch_size).cuda()
-                else:
-                    perm = torch.randperm(args.batch_size)
-
-                # if args.criterion == 'MSE':
-                #     cm_loss -= mse_loss(txt, im[perm])/k
-                # else:
-                #     cm_loss -= cm_criterion(txt, im[perm], \
-                #                            Variable(torch.ones(Tz.narrow(1,0,mask).size(0)).cuda()))/k
-
-                # sim  = (F.cosine_similarity(txt,txt[perm]) - 0.5)/2
-
-                if args.cm_criterion == 'MSE':
-                    sim  = (F.cosine_similarity(txt,txt[perm]) - 1)/(2*k)
-                    # cm_loss = cm_criterion(Tz.narrow(1,0,mask), Iz.narrow(1,0,mask))
-                    cm_loss += mse_loss(txt, im[perm], sim)
-                else:
-                    cm_loss += cm_criterion(txt, im[perm], \
-                                           Variable(-1*torch.ones(txt.size(0)).cuda()))/k
-
-
-            # cm_loss = Variable(torch.max(torch.FloatTensor([-0.100]).cuda(), cm_loss.data))
-
 
             # Computes the loss to be back-propagated
-            img_loss = img_rc_loss * (1 - args.cm_loss_weight) + cm_loss * args.cm_loss_weight
-            txt_loss = txt_rc_loss * (1 - args.cm_loss_weight) + cm_loss * args.cm_loss_weight
-            # txt_loss = txt_rc_loss + 0.1 * cm_loss
-            # img_loss = img_rc_loss + cm_loss
+            loss = rc_loss + cm_loss
 
-            txt_losses.update(txt_rc_loss.data[0],args.batch_size)
-            img_losses.update(img_rc_loss.data[0],args.batch_size)
+            txt_losses.update(rc_loss.data[0],args.batch_size)
+            img_losses.update(rc_loss.data[0],args.batch_size)
             cm_losses.update(cm_loss.data[0], args.batch_size)
             # </editor-fold desc = "Loss accumulation"?
 
@@ -449,7 +384,7 @@ def main():
             if train_images:
                 # Image Network Training and Backpropagation
 
-                img_loss.backward()
+                loss.backward()
                 # img_optim.step()
                 img_dec_optim.step()
                 img_enc_optim.step()
@@ -457,7 +392,7 @@ def main():
             else:
                 # Text Nextwork Training & Back Propagation
 
-                txt_loss.backward()
+                loss.backward()
                 # txt_optim.step()
                 txt_dec_optim.step()
                 txt_enc_optim.step()
@@ -522,7 +457,7 @@ def main():
         # </editor-fold desc = "Saving the models"?
 
         if args.validate == "true":
-            validate(encoder_Img, encoder_Txt, val_loader, mask, 10)
+            validate(encoder_Img, encoder_Txt, val_loader, mask, 10, "euclidean")
 
 
 if __name__ == "__main__":

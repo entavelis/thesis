@@ -17,7 +17,10 @@ def validate(encoder_Img, encoder_Txt, loader, mask, limit = 1000, metric = "cos
         # Set Evaluation Mode
         encoder_Img.eval()
 
-        encoder_Txt.encoder.eval()
+        try:
+            encoder_Txt.encoder.eval()
+        except AttributeError:
+            encoder_Txt.eval()
 
         batch_time = AverageMeter()
         end = time.time()
@@ -39,17 +42,23 @@ def validate(encoder_Img, encoder_Txt, loader, mask, limit = 1000, metric = "cos
 
             _, img_emb = encoder_Img(images)
 
-            txt_emb, _ = encoder_Txt(captions, lengths)
+            try:
+                txt_emb, _ = encoder_Txt(captions, lengths)
+                txt_emb = txt_emb[0,:,:mask]
+            except:
+                encoder_hidden = encoder_Txt.initHidden(len(lengths))
+                for ei in range(lengths[0] - 1):
+                    encoder_output, encoder_hidden = encoder_Txt(
+                        captions[ei,:], encoder_hidden)
+
+                txt_emb = txt_emb[:,0,:mask]
+
 
             img_emb = img_emb[:,:mask]
-            txt_emb = txt_emb[0,:,:mask]
+
             # current_embeddings = torch.cat( \
             #         (txt_emb.transpose(0,1).data,img_emb.unsqueeze(1).data)
             #         , 1)
-            current_embeddings = np.concatenate( \
-                (txt_emb.cpu().data.numpy(),\
-                 img_emb.cpu().data.numpy())\
-                ,0)
 
             current_embeddings = np.concatenate( \
                 (txt_emb.unsqueeze(0).cpu().data.numpy(),\

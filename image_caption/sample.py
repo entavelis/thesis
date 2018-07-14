@@ -2,12 +2,10 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np 
 import argparse
-import pickle 
-import os
-from torch.autograd import Variable 
-from torchvision import transforms 
-from build_vocab import Vocabulary
-from model import EncoderCNN, DecoderRNN
+import pickle
+from torch.autograd import Variable
+from torchvision import transforms
+from old.model import EncoderCNN, DecoderRNN
 from PIL import Image
 
 

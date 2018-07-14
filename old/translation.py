@@ -6,14 +6,8 @@
 import os
 import argparse
 from itertools import chain
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.autograd import Variable
 from dataset import *
-from model import *
-import scipy
+from old.model import *
 from progressbar import ETA, Bar, Percentage, ProgressBar
 
 parser = argparse.ArgumentParser()

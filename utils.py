@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.autograd import Variable
 
 #source: https://github.com/A-Jacobson/CNN_Sentence_Classification/blob/master/WordVectors.ipynb
@@ -67,12 +68,4 @@ class embedding(nn.Embedding):
 #             return orig_attr(*args, **kwargs)
 #         else:
 #             return orig_attr
-
-def mse_loss(input, target, sim=None):
-    if sim is None:
-        return torch.sum((input - target)**2) / input.data.nelement()
-    else:
-        return torch.mean(sim*torch.mean((input - target)**2,1))
-
-# def cosine_loss(input,target,sim=None);
 

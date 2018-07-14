@@ -6,12 +6,14 @@ class ImgVAE(nn.Module):
     def __init__(
             self,
             img_dimension=256,
-            feature_dimension = 300
+            hidden_size = 1024,
+            latent_size = 512
             ):
 
         super(ImgVAE, self).__init__()
 
-        self.feat_dim = feature_dimension
+        self.hidden_size = hidden_size
+        self.latent_size = latent_size
         self.img_dimension = img_dimension
 
         self.encoder = nn.Sequential(
@@ -26,13 +28,13 @@ class ImgVAE(nn.Module):
             nn.Conv2d(img_dimension * 4, img_dimension * 8, 4, 2, 1, bias=False),
             nn.BatchNorm2d(img_dimension * 8),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(img_dimension * 8, 1024, 4, 1, 0, bias=False),
-            nn.BatchNorm2d(1024),
+            nn.Conv2d(img_dimension * 8, self.hidden_size, 4, 1, 0, bias=False),
+            nn.BatchNorm2d(self.hidden_size),
             nn.LeakyReLU(0.2, inplace=True),
         )
 
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(1024, 64 * 8, 4, 1, 0, bias=False),
+            nn.ConvTranspose2d(self.hidden_size, 64 * 8, 4, 1, 0, bias=False),
             nn.BatchNorm2d(64 * 8),
             nn.ReLU(True),
             nn.ConvTranspose2d(img_dimension * 8, img_dimension * 4, 4, 2, 1, bias=False),
@@ -45,16 +47,20 @@ class ImgVAE(nn.Module):
             nn.BatchNorm2d(img_dimension),
             nn.ReLU(True),
             nn.ConvTranspose2d(img_dimension,      3, 4, 2, 1, bias=False),
-            nn.Tanh()
+            # nn.Tanh()
         )
 
-        self.hidden2mean = nn.Linear(1024, feature_dimension)
-        self.hidden2logv = nn.Linear(1024, feature_dimension)
+        self.hidden2mean = nn.Linear(self.hidden_size, latent_size)
+        self.hidden2logv = nn.Linear(self.hidden_size, latent_size)
 
-        self.latent2hidden = nn.Linear(feature_dimension, 1024)
-
+        self.latent2hidden = nn.Linear(latent_size, self.hidden_size)
 
     def forward(self, input):
+        mu, logv, z = self.encoder_forward(input)
+        output = self.decoder_forward(z)
+        return output, mu, logv, z
+
+    def encoder_forward(self, input):
         batch_size = input.size(0)
 
         enc = self.encoder(input)
@@ -66,13 +72,16 @@ class ImgVAE(nn.Module):
         # REPARAMETERIZATION
         std = torch.exp(0.5 * logv)
 
-        z = to_var(torch.randn([batch_size, self.feat_dim]))
+        z = to_var(torch.randn([batch_size, self.latent_size]))
         z = z * std + mu
 
+        return mu, logv, z
+
+    def decoder_forward(self, z):
+        batch_size = z.size(0)
         dec_input = self.latent2hidden(z)
 
-        output = self.decoder(dec_input.view(batch_size, 1024, 1 , 1))
-
-        return output, mu, logv, z
+        output = self.decoder(dec_input.view(batch_size, self.hidden_size, 1 , 1))
+        return  output
 
 
