@@ -28,6 +28,7 @@ class coupled_vae_trainer(trainer):
     def train(self, images, captions, lengths, save_images):
 
         # Forward, Backward and Optimize
+        self.networks_zero_grad()
 
         img_out, img_mu, img_logv, img_z, txt_out, txt_mu, txt_logv, txt_z = \
                                  self.networks["coupled_vae"](images, captions, lengths, self.train_swapped)
@@ -39,6 +40,14 @@ class coupled_vae_trainer(trainer):
                                                lengths, txt_mu, txt_logv, "logistic", self.step, 0.0025,
                                                2500)
         txt_rc_loss = (NLL_loss + KL_weight * KL_loss) / torch.sum(lengths).float()
+
+        loss = 0.1*txt_rc_loss + img_rc_loss
+
+        self.backpropagate(loss)
+
+        if save_images:
+            self.save_samples(images[0], img_out[0], captions[0], txt_out[0])
+
 
         return img_rc_loss, txt_rc_loss
 

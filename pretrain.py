@@ -15,7 +15,6 @@ from itertools import chain
 import torch.optim as optim
 from torch.autograd import Variable
 from torchvision import transforms
-from torchvision import transforms
 
 from models.CoupledVAE import *
 from trainers.coupled_vae_trainer import coupled_vae_trainer as trainer
@@ -118,7 +117,6 @@ def main():
 
     assert args.common_emb_ratio <= 1.0 and args.common_emb_ratio >= 0
 
-    mask = int(args.common_emb_ratio * args.hidden_size)
 
     #</editor-fold>
 
@@ -130,8 +128,10 @@ def main():
         transforms.RandomCrop(args.crop_size),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406),
-                             (0.229, 0.224, 0.225))
+        transforms.Normalize((.5,.5,.5),
+                             (.5, .5, .5))
+        # transforms.Normalize((0.485, 0.456, 0.406),
+        #                      (0.229, 0.224, 0.225))
         ])
 
     #</editor-fold>
@@ -210,14 +210,10 @@ def main():
 
             img_rc_loss, txt_rc_loss = model_trainer.train(images, captions, lengths, not i % args.image_save_interval)
 
-            loss = img_rc_loss + txt_rc_loss
-
             txt_losses.update(txt_rc_loss.data[0],args.batch_size)
             img_losses.update(img_rc_loss.data[0],args.batch_size)
             # cm_losses.update(cm_loss.data[0], args.batch_size)
 
-            model_trainer.backpropagate(loss)
-            # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
 
@@ -237,6 +233,8 @@ def main():
         # </editor-fold desc = "Logging">
 
         bar.finish()
+        model_trainer.save_losses(epoch, img_losses.avg, txt_losses.avg)
+        model_trainer.save_models(epoch)
 
 
 

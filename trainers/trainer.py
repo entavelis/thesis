@@ -1,5 +1,6 @@
 import torch
 import os
+import scipy
 
 class trainer( object ):
     """Some description that tells you it's abstract,
@@ -22,15 +23,20 @@ class trainer( object ):
 
         result_path = args.result_path
         if result_path == "NONE":
-            self.result_path = self.model_path + "results/"
-
-        with open(os.path.join(self.result_path,"losses.csv") , "w") as text_file:
-            text_file.write("Epoch, Img, Txt, CM\n")
+            self.result_path = self.model_path + "samples/"
 
         if not os.path.exists(self.result_path):
             os.makedirs(self.result_path)
         if not os.path.exists(self.model_path):
             os.makedirs(self.model_path)
+
+        with open(os.path.join(self.result_path,"losses.csv") , "w") as text_file:
+            text_file.write("Epoch, Vae, Dis\n")
+
+        self.mask = int(args.common_emb_ratio * args.hidden_size)
+
+        self.save_counter = 1
+        self.iteration = 0
 
     def train(self):
         raise NotImplementedError( "Should have implemented this" )
@@ -71,6 +77,45 @@ class trainer( object ):
         for n in self.networks.values():
             n.zero_grad()
 
+    def set_eval_models(self):
+        for net in self.networks.values():
+            net.eval()
+
     def set_train_models(self):
         for net in self.networks.values():
             net.train()
+
+    def save_samples(self, image, img_out, caption, txt_out):
+        # subdir_path = os.path.join(self.result_path, str(self.save_counter))
+        subdir_path = self.result_path
+
+        if os.path.exists(subdir_path):
+            pass
+        else:
+            os.makedirs(subdir_path)
+
+        # im_or = (images[im_idx].cpu().data.numpy().transpose(1,2,0))*255
+        # im = (img_out[im_idx].cpu().data.numpy().transpose(1,2,0))*255
+        im_or = (image.cpu().data.numpy().transpose(1, 2, 0) / 2 + .5) * 255
+        im = (img_out.cpu().data.numpy().transpose(1, 2, 0) / 2 + .5) * 255
+        # im = img_out[im_idx].cpu().data.numpy().transpose(1,2,0)*255
+
+        filename_prefix = os.path.join(subdir_path, str(self.save_counter).zfill(3))
+        scipy.misc.imsave(filename_prefix + '_original.jpg', im_or)
+        scipy.misc.imsave(filename_prefix + '.jpg', im)
+
+        txt_or = " ".join([self.vocab.idx2word[c] for c in caption.cpu().data.numpy()])
+        _, generated = torch.topk(txt_out, 1)
+        txt = " ".join([self.vocab.idx2word[c] for c in generated[:,0].cpu().data.numpy()])
+
+        with open(filename_prefix + "_captions.txt", "w") as text_file:
+            text_file.write("Save_counter %d\n" % self.save_counter)
+            text_file.write("Original:\t %s\n" % txt_or)
+            text_file.write("Generated:\t %s" % txt)
+
+        self.save_counter += 1
+
+    # change names
+    def save_losses(self,epoch, img_loss, txt_loss):
+        with open(os.path.join(self.result_path,"losses.csv") , "a") as text_file:
+            text_file.write("{}, {}, {}\n".format(epoch,img_loss, txt_loss))

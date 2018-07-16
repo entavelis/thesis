@@ -43,5 +43,5 @@ class ImgDiscriminator(nn.Module):
 
         conv5 = self.conv5( relu4 )
 
-        return torch.sigmoid( conv5 ), [relu2, relu3, relu4]
+        return torch.sigmoid( conv5 ) #, [relu2, relu3, relu4]
 

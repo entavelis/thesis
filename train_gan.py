@@ -8,19 +8,21 @@ import time
 
 import scipy
 
+
 import argparse
 from itertools import chain
 
 import torch.optim as optim
 from torch.autograd import Variable
 from torchvision import transforms
+from torchvision import transforms
 
-from models.CoupledVAE import *
-from models.ImgDiscriminator import *
-from models.SeqDiscriminator import *
+from trainers.coupled_vae_gan_trainer import coupled_vae_trainer as trainer
 
 import pickle
 from utils import *
+from losses import *
+
 from image_caption.data_loader import Vocabulary
 from image_caption.data_loader import get_loader
 from pytorch_classification.utils import Bar, AverageMeter
@@ -79,7 +81,6 @@ parser.add_argument('--latent_size', type=int, default=512,
 parser.add_argument('--num_layers', type=int, default=1,
                     help='number of layers in lstm')
 
-parser.add_argument('--extra_layers', type=str, default='true')
 parser.add_argument('--fixed_embeddings', type=str, default="true")
 parser.add_argument('--num_epochs', type=int, default=20)
 parser.add_argument('--batch_size', type=int, default= 32)
@@ -95,6 +96,7 @@ parser.add_argument('--negative_samples', type=int, default = 5)
 
 parser.add_argument('--validate', type=str, default = "true")
 parser.add_argument('--load_model', type=str, default = "NONE")
+parser.add_argument('--load_vae', type=str, default = "NONE")
 
 parser.add_argument('--comment', type=str, default = "test")
 #</editor-fold>
@@ -116,33 +118,7 @@ def main():
 
     assert args.common_emb_ratio <= 1.0 and args.common_emb_ratio >= 0
 
-    mask = int(args.common_emb_ratio * args.hidden_size)
 
-    cuda = args.cuda
-    if cuda == 'true':
-        cuda = True
-    else:
-        cuda = False
-
-    if args.load_model == "NONE":
-        keep_loading = False
-        # model_path = args.model_path + current_date + "/"
-        model_path = args.model_path + args.comment + "/"
-    else:
-        keep_loading = True
-        model_path = args.model_path + args.load_model + "/"
-
-    result_path = args.result_path
-    if result_path == "NONE":
-        result_path = model_path + "results/"
-
-
-
-
-    if not os.path.exists(result_path):
-        os.makedirs(result_path)
-    if not os.path.exists(model_path):
-        os.makedirs(model_path)
     #</editor-fold>
 
     # <editor-fold desc="Image Preprocessing">
@@ -153,8 +129,10 @@ def main():
         transforms.RandomCrop(args.crop_size),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406),
-                             (0.229, 0.224, 0.225))
+        transforms.Normalize((.5,.5,.5),
+                             (.5, .5, .5))
+        # transforms.Normalize((0.485, 0.456, 0.406),
+        #                      (0.229, 0.224, 0.225))
         ])
 
     #</editor-fold>
@@ -179,8 +157,8 @@ def main():
     glove_emb = nn.Embedding(emb.size(0), emb.size(1))
 
     # Freeze weighs
-    # if args.fixed_embeddings == "true":
-        # glove_emb.weight.requires_grad = False
+    if args.fixed_embeddings == "true":
+        glove_emb.weight.requires_grad = False
 
 
     # </editor-fold>
@@ -202,30 +180,12 @@ def main():
 
     # <editor-fold desc="Network Initialization">
 
-    print("Setting up the Networks...")
-    coupled_vae = CoupledVAE(glove_emb, len(vocab), hidden_size=args.hidden_size, latent_size=args.latent_size,
-                          batch_size = args.batch_size)
+    print("Setting up the trainer...")
+    model_trainer = trainer(args, glove_emb, vocab)
 
-    if cuda:
-        coupled_vae = coupled_vae.cuda()
-
-    # </editor-fold>
+    #  <\editor-fold desc="Network Initialization">
 
 
-
-
-    # </editor-fold>
-
-    # <editor-fold desc="Optimizers">
-    print("Setting up the Optimizers...")
-
-    vae_optim = optim.Adam(coupled_vae.parameters(), lr=args.learning_rate, betas=(0.5, 0.999), weight_decay=0.00001)
-
-    # </editor-fold desc="Optimizers">
-
-    train_swapped = False # Reverse 2
-
-    step = 0
     for epoch in range(args.num_epochs):
 
         # <editor-fold desc = "Epoch Initialization"?
@@ -240,114 +200,47 @@ def main():
 
         bar = Bar('Training Net', max=len(data_loader))
 
-        if keep_loading:
-            suffix = "-" + str(epoch) + "-" + args.load_model + ".pkl"
-            try:
-                coupled_vae.load_state_dict(torch.load(os.path.join(args.model_path,
-                                        'coupled_vae' + suffix)))
-            except FileNotFoundError:
-                print("Didn't find any models switching to training")
-                keep_loading = False
+        for i, (images, captions, lengths) in enumerate(data_loader):
 
-        if not keep_loading:
+            if i == len(data_loader)-1:
+                break
 
-            # Set training mode
-            coupled_vae.train()
+            images = to_var(images)
+            captions = to_var(captions)
+            lengths = to_var(torch.LongTensor(lengths))            # print(captions.size())
 
-
-            # </editor-fold desc = "Epoch Initialization"?
-
-            train_swapped = not train_swapped
-            for i, (images, captions, lengths) in enumerate(data_loader):
-
-                if i == len(data_loader)-1:
-                    break
-
-                images = to_var(images)
-                captions = to_var(captions)
-                lengths = to_var(torch.LongTensor(lengths))            # print(captions.size())
-
-                # Forward, Backward and Optimize
-                vae_optim.zero_grad()
+            img_rc_loss, txt_rc_loss = model_trainer.forward(epoch,
+                                                           images,
+                                                           captions,
+                                                           lengths,
+                                                           not i % args.image_save_interval)
 
 
-                img_out, img_mu, img_logv, img_z, txt_out, txt_mu, txt_logv, txt_z = \
-                                                                 coupled_vae(images, captions, lengths, train_swapped)
+            txt_losses.update(txt_rc_loss.data[0],args.batch_size)
+            img_losses.update(img_rc_loss.data[0],args.batch_size)
 
-                img_rc_loss = img_vae_loss(img_out, images, img_mu, img_logv) / (args.batch_size * args.crop_size**2)
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
 
-                NLL_loss, KL_loss, KL_weight = seq_vae_loss(txt_out, captions,
-                                                       lengths, txt_mu, txt_logv, "logistic", step, 0.0025,
-                                                       2500)
-                txt_rc_loss = (NLL_loss + KL_weight * KL_loss) / torch.sum(lengths).float()
+            # plot progress
+            bar.suffix = '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | VAE-Loss: {img_l:.3f}| Disc-Loss: {txt_l:.3f}'.format(
+                batch=i,
+                size=len(data_loader),
+                bt=batch_time.avg,
+                total=bar.elapsed_td,
+                eta=bar.eta_td,
+                img_l=img_losses.avg,
+                txt_l=txt_losses.avg,
+                )
+            bar.next()
 
-                txt_losses.update(txt_rc_loss.data[0],args.batch_size)
-                img_losses.update(img_rc_loss.data[0],args.batch_size)
+        # </editor-fold desc = "Logging">
 
-                loss = img_rc_loss + txt_rc_loss
+        bar.finish()
 
-                loss.backward()
-                vae_optim.step()
-                step += 1
-
-                if i % args.image_save_interval == 0:
-                    subdir_path = os.path.join( result_path, str(i / args.image_save_interval) )
-
-                    if os.path.exists( subdir_path ):
-                        pass
-                    else:
-                        os.makedirs( subdir_path )
-
-                    for im_idx in range(3):
-                        # im_or = (images[im_idx].cpu().data.numpy().transpose(1,2,0))*255
-                        # im = (img_out[im_idx].cpu().data.numpy().transpose(1,2,0))*255
-                        im_or = (images[im_idx].cpu().data.numpy().transpose(1,2,0)/2+.5)*255
-                        im = (img_out[im_idx].cpu().data.numpy().transpose(1,2,0)/2+.5)*255
-                        # im = img_out[im_idx].cpu().data.numpy().transpose(1,2,0)*255
-
-                        filename_prefix = os.path.join (subdir_path, str(im_idx))
-                        scipy.misc.imsave( filename_prefix + '_original.A.jpg', im_or)
-                        scipy.misc.imsave( filename_prefix + '.A.jpg', im)
-
-
-                        txt_or = " ".join([vocab.idx2word[c] for c in captions[im_idx].cpu().data.numpy()])
-                        _, generated = torch.topk(txt_out[im_idx],1)
-                        txt = " ".join([vocab.idx2word[c] for c in generated[:,0].cpu().data.numpy()])
-
-                        with open(filename_prefix + "_captions.txt", "w") as text_file:
-                            text_file.write("Original: %s\n" % txt_or)
-                            text_file.write("Generated: %s" % txt)
-
-
-                # measure elapsed time
-                batch_time.update(time.time() - end)
-                end = time.time()
-
-                # plot progress
-                bar.suffix = '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss_Img: {img_l:.3f}| Loss_Txt: {txt_l:.3f} | Loss_CM: {cm_l:.4f}'.format(
-                    batch=i,
-                    size=len(data_loader),
-                    bt=batch_time.avg,
-                    total=bar.elapsed_td,
-                    eta=bar.eta_td,
-                    img_l=img_losses.avg,
-                    txt_l=txt_losses.avg,
-                    cm_l=cm_losses.avg,
-                    )
-                bar.next()
-
-            # </editor-fold desc = "Logging">
-
-            bar.finish()
-
-            # <editor-fold desc = "Saving the models"?
-            # Save the models
-            print('\n')
-            print('Saving the models in {}...'.format(model_path))
-            torch.save(coupled_vae.state_dict(),
-                       os.path.join(model_path,
-                                    'coupled_vae' %(epoch+1)) + ".pkl")
-            # </editor-fold desc = "Saving the models"?
+        model_trainer.save_losses(epoch, img_losses.avg, txt_losses.avg)
+        model_trainer.save_models(epoch)
 
 
 if __name__ == "__main__":

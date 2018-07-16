@@ -18,11 +18,15 @@ class CoupledVAE(nn.Module):
                 pad_idx = 0,
                 max_sequence_length = 30,
                 batch_size = 128,
-                drop_out = 0.3):
+                drop_out = 0.3,
+                averaged_output = False):
 
         super(CoupledVAE, self).__init__()
 
         self.tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Tensor
+
+        # like rnn-wgan
+        self.averaged_output = True
 
         self.batch_size = batch_size
         self.max_sequence_length = max_sequence_length
@@ -98,7 +102,7 @@ class CoupledVAE(nn.Module):
             nn.BatchNorm2d(img_dimension),
             nn.ReLU(True),
             nn.ConvTranspose2d(img_dimension,      3, 4, 2, 1, bias=False),
-            # nn.Tanh()
+            nn.Tanh()
         )
 
         self.hidden2mean = nn.Linear(self.hidden_size, latent_size)
@@ -108,10 +112,10 @@ class CoupledVAE(nn.Module):
 
 
     def forward(self, input_images, input_captions, lengths, swapped):
-        input_embedding, sorted_idx, sorted_lengths, packed_input = self.prepare_input(input_captions, lengths)
+        sorted_idx, self.packed_input = self.prepare_input(input_captions, lengths)
 
         img_enc = self.img_encoder_forward(input_images)
-        txt_enc = self.txt_encoder_forward(packed_input)
+        txt_enc = self.txt_encoder_forward(self.packed_input)
 
         img_mu, img_logv, img_z = self.Hidden2Z(img_enc)
         txt_mu, txt_logv, txt_z = self.Hidden2Z(txt_enc)
@@ -124,7 +128,7 @@ class CoupledVAE(nn.Module):
             hidden4txt = self.Z2Hidden(txt_z)
 
         img_out = self.img_decoder_forward(hidden4img)
-        txt_out = self.txt_decoder_forward(hidden4txt , input_embedding, sorted_idx, sorted_lengths)
+        txt_out = self.txt_decoder_forward(hidden4txt , self.packed_input, sorted_idx)
 
         return img_out, img_mu, img_logv, img_z, txt_out, txt_mu, txt_logv, txt_z
 
@@ -154,12 +158,13 @@ class CoupledVAE(nn.Module):
         return  output
 
     def prepare_input(self, input_sequence, length):
+        # Remove
         sorted_lengths, sorted_idx = torch.sort(length, descending=True)
         input_sequence = input_sequence[sorted_idx]
         input_embedding = self.embedding(input_sequence)
         packed_input = rnn_utils.pack_padded_sequence(input_embedding, sorted_lengths.data.tolist(), batch_first=True)
 
-        return input_embedding, sorted_idx, sorted_lengths, packed_input
+        return  sorted_idx, packed_input
 
     def txt_encoder_forward(self, packed_input):
         # ENCODER
@@ -173,8 +178,9 @@ class CoupledVAE(nn.Module):
 
         return hidden
 
-    def txt_decoder_forward(self,hidden, input_embedding, sorted_idx, sorted_lengths):
-        # DECODER
+    # DECODER
+    def txt_decoder_forward(self,hidden, packed_input, sorted_idx):
+
         if self.bidirectional or self.num_layers > 1:
             # unflatten hidden state
             hidden = hidden.view(self.hidden_factor, self.batch_size, self.hidden_size)
@@ -182,8 +188,8 @@ class CoupledVAE(nn.Module):
             hidden = hidden.unsqueeze(0)
 
         # decoder input
-        input_embedding = self.word_dropout(input_embedding)
-        packed_input = rnn_utils.pack_padded_sequence(input_embedding, sorted_lengths.data.tolist(), batch_first=True)
+        # input_embedding = self.word_dropout(input_embedding)
+        # packed_input = rnn_utils.pack_padded_sequence(input_embedding, sorted_lengths.data.tolist(), batch_first=True)
 
         # decoder forward pass
         outputs, _ = self.decoder_rnn(packed_input, hidden)
@@ -202,3 +208,13 @@ class CoupledVAE(nn.Module):
         return logp
 
 
+    def reconstruct(self, gen_images, gen_captions):
+
+        img_enc = self.img_encoder_forward(gen_images)
+        txt_enc = self.txt_encoder_forward(gen_captions)
+
+        img_mu, img_logv, img_z = self.Hidden2Z(img_enc)
+        txt_mu, txt_logv, txt_z = self.Hidden2Z(txt_enc)
+
+
+        return img_mu, img_logv, img_z, txt_mu, txt_logv, txt_z

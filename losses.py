@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
+from torch.autograd import grad
 
 def mse_loss(input, target, sim=None):
     if sim is None:
@@ -89,6 +90,9 @@ def kl_anneal_function(anneal_function, step, k, x0):
     elif anneal_function == 'linear':
         return min(1, step/x0)
 
+def kl_loss(mean, logv):
+    return -0.5 * torch.sum(1 + logv - mean.pow(2) - logv.exp())
+
 def seq_vae_loss(logp, target, length, mean, logv, anneal_function, step, k, x0):
         # cut-off unnecessary padding from target, and flatten
     NLL = torch.nn.NLLLoss(size_average=False, ignore_index=0)
@@ -150,3 +154,50 @@ def crossmodal_loss(txt_z, img_z, mask, cm_type, cm_criterion, negative_samples,
     # cm_loss = Variable(torch.max(torch.FloatTensor([-0.100]).cuda(), cm_loss.data))
     return cm_loss
 
+# DISCO GAN
+def get_gan_loss(dis_real, dis_fake, criterion, cuda):
+    labels_dis_real = Variable(torch.ones( [dis_real.size()[0], 1] ))
+    labels_dis_fake = Variable(torch.zeros([dis_fake.size()[0], 1] ))
+    labels_gen = Variable(torch.ones([dis_fake.size()[0], 1]))
+
+    if cuda:
+        labels_dis_real = labels_dis_real.cuda()
+        labels_dis_fake = labels_dis_fake.cuda()
+        labels_gen = labels_gen.cuda()
+
+    dis_loss = criterion( dis_real, labels_dis_real ) * 0.5 + criterion( dis_fake, labels_dis_fake ) * 0.5
+    gen_loss = criterion( dis_fake, labels_gen )
+
+    return dis_loss, gen_loss
+
+
+# improved wgan in pytorch
+def calc_gradient_penalty(netD, real_data, fake_data):
+    # print "real_data: ", real_data.size(), fake_data.size()
+
+    BATCH_SIZE = real_data.size(0)
+    alpha = torch.rand(BATCH_SIZE, 1)
+
+    alpha = alpha.expand(BATCH_SIZE, real_data.nelement()//BATCH_SIZE).contiguous()
+    alpha = alpha.view(real_data.size())
+
+    # alpha = alpha.expand(BATCH_SIZE, real_data.nelement()/BATCH_SIZE).contiguous().view(BATCH_SIZE, 3, 64, 64)
+    alpha = Variable(alpha.cuda())
+
+    interpolates = alpha * real_data + ((1 - alpha) * fake_data)
+
+    interpolates = interpolates.cuda()
+    # interpolates = Variable(interpolates, requires_grad=True)
+
+    disc_interpolates = netD(interpolates)
+
+    gradients = grad(outputs=disc_interpolates, inputs=interpolates,
+                              grad_outputs=torch.ones(disc_interpolates.size()).cuda(),
+                              create_graph=True, retain_graph=True, only_inputs=True)[0]
+    gradients = gradients.view(gradients.size(0), -1)
+
+    # Gradient Penalty
+    LAMBDA = 10
+    gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * LAMBDA
+
+    return gradient_penalty
