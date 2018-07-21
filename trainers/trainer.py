@@ -1,12 +1,14 @@
+import matplotlib.pyplot as plt
 import torch
 import os
 import scipy
-
+from pytorch_classification.utils import AverageMeter
 class trainer( object ):
     """Some description that tells you it's abstract,
     often listing the methods you're expected to supply."""
     networks = {}
     optimizers = {}
+    losses = {}
     cuda = True
 
     def __init__( self, args, embeddings, vocab):
@@ -29,9 +31,6 @@ class trainer( object ):
             os.makedirs(self.result_path)
         if not os.path.exists(self.model_path):
             os.makedirs(self.model_path)
-
-        with open(os.path.join(self.result_path,"losses.csv") , "w") as text_file:
-            text_file.write("Epoch, Vae, Dis\n")
 
         self.mask = int(args.common_emb_ratio * args.hidden_size)
 
@@ -104,18 +103,38 @@ class trainer( object ):
         scipy.misc.imsave(filename_prefix + '_original.jpg', im_or)
         scipy.misc.imsave(filename_prefix + '.jpg', im)
 
-        txt_or = " ".join([self.vocab.idx2word[c] for c in caption.cpu().data.numpy()])
-        _, generated = torch.topk(txt_out, 1)
-        txt = " ".join([self.vocab.idx2word[c] for c in generated[:,0].cpu().data.numpy()])
+        try:
+            txt_or = " ".join([self.vocab.idx2word[c] for c in caption.cpu().data.numpy()])
+            _, generated = torch.topk(txt_out, 1)
+            txt = " ".join([self.vocab.idx2word[c] for c in generated[:,0].cpu().data.numpy()])
 
-        with open(filename_prefix + "_captions.txt", "w") as text_file:
-            text_file.write("Save_counter %d\n" % self.save_counter)
-            text_file.write("Original:\t %s\n" % txt_or)
-            text_file.write("Generated:\t %s" % txt)
+            with open(filename_prefix + "_captions.txt", "w") as text_file:
+                text_file.write("Save_counter %d\n" % self.save_counter)
+                text_file.write("Original:\t %s\n" % txt_or)
+                text_file.write("Generated:\t %s" % txt)
+        except:
+            pass
 
+
+
+        self.save_losses()
         self.save_counter += 1
 
     # change names
-    def save_losses(self,epoch, img_loss, txt_loss):
+    def save_losses(self):
         with open(os.path.join(self.result_path,"losses.csv") , "a") as text_file:
-            text_file.write("{}, {}, {}\n".format(epoch,img_loss, txt_loss))
+            toWrite= str(self.iteration)
+            for _, l_value in self.losses.items():
+                toWrite = ' , {}'.format(l_value.avg)
+            text_file.write(toWrite + "\n")
+
+
+    def create_losses_meter(self, losses_name_list):
+        toWrite = "Iteration"
+        for name in losses_name_list:
+            self.losses[name] = AverageMeter()
+            toWrite += ", " + name
+        toWrite +="\n"
+
+        with open(os.path.join(self.result_path,"losses.csv") , "w") as text_file: text_file.write(toWrite)
+

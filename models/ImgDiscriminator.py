@@ -4,24 +4,25 @@ import torch.nn as nn
 class ImgDiscriminator(nn.Module):
     def __init__(
             self,
-            img_dimension = 64
+            img_dimension = 64,
+            betaReLU = 0.2
             ):
 
         super(ImgDiscriminator, self).__init__()
         self.conv1 = nn.Conv2d(3, img_dimension, 4, 2, 1, bias=False)
-        self.relu1 = nn.LeakyReLU(0.2, inplace=True)
+        self.relu1 = nn.LeakyReLU(betaReLU, inplace=True)
 
         self.conv2 = nn.Conv2d(img_dimension, img_dimension * 2, 4, 2, 1, bias=False)
         self.bn2 = nn.BatchNorm2d(img_dimension * 2)
-        self.relu2 = nn.LeakyReLU(0.2, inplace=True)
+        self.relu2 = nn.LeakyReLU(betaReLU, inplace=True)
 
         self.conv3 = nn.Conv2d(img_dimension * 2, img_dimension * 4, 4, 2, 1, bias=False)
         self.bn3 = nn.BatchNorm2d(img_dimension * 4)
-        self.relu3 = nn.LeakyReLU(0.2, inplace=True)
+        self.relu3 = nn.LeakyReLU(betaReLU, inplace=True)
 
         self.conv4 = nn.Conv2d(img_dimension * 4, img_dimension * 8, 4, 2, 1, bias=False)
         self.bn4 = nn.BatchNorm2d(img_dimension * 8)
-        self.relu4 = nn.LeakyReLU(0.2, inplace=True)
+        self.relu4 = nn.LeakyReLU(betaReLU, inplace=True)
 
         self.conv5 = nn.Conv2d(img_dimension * 8, 1, 4, 1, 0, bias=False)
 
@@ -43,5 +44,5 @@ class ImgDiscriminator(nn.Module):
 
         conv5 = self.conv5( relu4 )
 
-        return torch.sigmoid( conv5 ) #, [relu2, relu3, relu4]
+        return torch.sigmoid( conv5 ).mean(0).view(1) #, [relu2, relu3, relu4]
 

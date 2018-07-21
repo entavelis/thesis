@@ -17,7 +17,7 @@ from torch.autograd import Variable
 from torchvision import transforms
 from torchvision import transforms
 
-from trainers.coupled_vae_gan_trainer import coupled_vae_trainer as trainer
+from trainers import  *
 
 import pickle
 from utils import *
@@ -31,6 +31,8 @@ from pytorch_classification.utils import Bar, AverageMeter
 
 #<editor-fold desc="Arguments"
 parser = argparse.ArgumentParser()
+parser.add_argument('method', type=str)
+
 parser.add_argument('--cuda', type=str, default='true', help='Set cuda usage')
 parser.add_argument('--epoch_size', type=int, default=20, help='Set epoch size')
 parser.add_argument('--result_path', type=str, default='NONE',
@@ -76,16 +78,16 @@ parser.add_argument('--save_step', type=int, default=1000,
 parser.add_argument('--word_embedding_size', type=int, default=300)
 parser.add_argument('--hidden_size', type=int, default=1024,
                     help='dimension of lstm hidden states')
-parser.add_argument('--latent_size', type=int, default=512,
+parser.add_argument('--latent_size', type=int, default=100,
                     help='dimension of latent vector z')
 parser.add_argument('--num_layers', type=int, default=1,
                     help='number of layers in lstm')
 
 parser.add_argument('--fixed_embeddings', type=str, default="true")
 parser.add_argument('--num_epochs', type=int, default=20)
-parser.add_argument('--batch_size', type=int, default= 32)
+parser.add_argument('--batch_size', type=int, default= 64)
 parser.add_argument('--num_workers', type=int, default=2)
-parser.add_argument('--learning_rate', type=float, default=0.0001)
+parser.add_argument('--learning_rate', type=float, default=0.001)
 
 parser.add_argument('--text_criterion', type=str, default='NLLLoss')
 parser.add_argument('--cm_criterion', type=str, default='Cosine')
@@ -98,7 +100,7 @@ parser.add_argument('--validate', type=str, default = "true")
 parser.add_argument('--load_model', type=str, default = "NONE")
 parser.add_argument('--load_vae', type=str, default = "NONE")
 
-parser.add_argument('--comment', type=str, default = "test")
+parser.add_argument('--comment', type=str, default = "NONE")
 #</editor-fold>
 
 def main():
@@ -106,9 +108,17 @@ def main():
     args = parser.parse_args()
 
     # <editor-fold desc="Initialization">
-    if args.comment == "test":
-        print("WARNING: name is test!!!\n\n")
+    if args.comment == "NONE":
+        args.comment = args.method
 
+    if args.method == "coupled_vae_gan":
+        trainer = coupled_vae_gan_trainer.coupled_vae_gan_trainer
+    elif args.method =="coupled_vae":
+        trainer = coupled_vae_trainer.coupled_vae_trainer
+    elif args.method == "wgan":
+        trainer = wgan_trainer.wgan_trainer
+    else:
+        assert True, "Invalid method"
 
     # now = datetime.datetime.now()
     # current_date = now.strftime("%m-%d-%H-%M")
@@ -193,9 +203,6 @@ def main():
         # TRAINING TIME
         print('EPOCH ::: TRAINING ::: ' + str(epoch + 1))
         batch_time = AverageMeter()
-        txt_losses = AverageMeter()
-        img_losses = AverageMeter()
-        cm_losses = AverageMeter()
         end = time.time()
 
         bar = Bar('Training Net', max=len(data_loader))
@@ -209,37 +216,37 @@ def main():
             captions = to_var(captions)
             lengths = to_var(torch.LongTensor(lengths))            # print(captions.size())
 
-            img_rc_loss, txt_rc_loss = model_trainer.forward(epoch,
-                                                           images,
-                                                           captions,
-                                                           lengths,
-                                                           not i % args.image_save_interval)
+            model_trainer.forward(epoch,
+                              images,
+                              captions,
+                              lengths,
+                              not i % args.image_save_interval)
 
-
-            txt_losses.update(txt_rc_loss.data[0],args.batch_size)
-            img_losses.update(img_rc_loss.data[0],args.batch_size)
 
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
 
             # plot progress
-            bar.suffix = '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | VAE-Loss: {img_l:.3f}| Disc-Loss: {txt_l:.3f}'.format(
+            bar.suffix = '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:}'.format(
                 batch=i,
                 size=len(data_loader),
                 bt=batch_time.avg,
                 total=bar.elapsed_td,
                 eta=bar.eta_td,
-                img_l=img_losses.avg,
-                txt_l=txt_losses.avg,
                 )
+
+            for l_name, l_value in model_trainer.losses.items():
+                bar.suffix += ' | {name}: {val:.3f}'.format(
+                    name = l_name,
+                    val= l_value.avg,
+                )
+
             bar.next()
 
         # </editor-fold desc = "Logging">
 
         bar.finish()
-
-        model_trainer.save_losses(epoch, img_losses.avg, txt_losses.avg)
         model_trainer.save_models(epoch)
 
 

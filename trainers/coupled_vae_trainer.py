@@ -34,7 +34,7 @@ class coupled_vae_trainer(trainer):
                                  self.networks["coupled_vae"](images, captions, lengths, self.train_swapped)
 
         img_rc_loss = img_vae_loss(img_out, images, img_mu, img_logv) /\
-                      (self.args.batch_size * self.args.crop_size**2)
+                       (self.args.batch_size * self.args.crop_size**2)
 
         NLL_loss, KL_loss, KL_weight = seq_vae_loss(txt_out, captions,
                                                lengths, txt_mu, txt_logv, "logistic", self.step, 0.0025,

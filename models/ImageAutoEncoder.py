@@ -4,7 +4,8 @@ class ImageEncoder(nn.Module):
     def __init__(
             self,
             img_dimension=256,
-            feature_dimension = 300
+            feature_dimension = 300,
+            reluBeta = 0.3
             ):
 
         super(ImageEncoder, self).__init__()
@@ -14,42 +15,42 @@ class ImageEncoder(nn.Module):
         if img_dimension == 64 :
             self.main = nn.Sequential(
                 nn.Conv2d(3, img_dimension, 4, 2, 1, bias=False),
-                nn.LeakyReLU(0.2, inplace=True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.Conv2d(img_dimension, img_dimension * 2, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension * 2),
-                nn.LeakyReLU(0.2, inplace=True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.Conv2d(img_dimension * 2, img_dimension * 4, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension * 4),
-                nn.LeakyReLU(0.2, inplace=True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.Conv2d(img_dimension * 4, img_dimension * 8, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension * 8),
-                nn.LeakyReLU(0.2, inplace=True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 # nn.Conv2d(img_dimension * 8, img_dimension * 8, 4, 2, 1, bias=False),
                 # nn.BatchNorm2d(img_dimension * 8),
-                # nn.LeakyReLU(0.2, inplace=True),
+                # nn.LeakyReLU(reluBeta, inplace=True),
                 nn.Conv2d(img_dimension * 8, feature_dimension, 4, 1, 0, bias=False),
                 nn.BatchNorm2d(feature_dimension),
-                nn.LeakyReLU(0.2, inplace=True),
+                nn.LeakyReLU(reluBeta, inplace=True),
             )
         else:
             self.main = nn.Sequential(
                 nn.Conv2d(3, img_dimension, 4, 2, 1, bias=False),
-                nn.LeakyReLU(0.2, inplace=True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.Conv2d(img_dimension, img_dimension * 2, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension * 2),
-                nn.LeakyReLU(0.2, inplace=True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.Conv2d(img_dimension * 2, img_dimension * 4, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension * 4),
-                nn.LeakyReLU(0.2, inplace=True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.Conv2d(img_dimension * 4, img_dimension * 8, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension * 8),
-                nn.LeakyReLU(0.2, inplace=True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.Conv2d(img_dimension * 8, img_dimension * 8, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension * 8),
-                nn.LeakyReLU(0.2, inplace=True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.Conv2d(img_dimension * 8, feature_dimension, 4, 1, 0, bias=False),
                 nn.BatchNorm2d(feature_dimension),
-                nn.LeakyReLU(0.2, inplace=True),
+                nn.LeakyReLU(reluBeta, inplace=True),
             )
 
     def forward(self, input):
@@ -63,7 +64,8 @@ class ImageDecoder(nn.Module):
     def __init__(
             self,
             img_dimension=256,
-            feature_dimension =300
+            feature_dimension =300,
+            reluBeta = 0.2
             ):
 
         super(ImageDecoder, self).__init__()
@@ -72,19 +74,19 @@ class ImageDecoder(nn.Module):
             self.main = nn.Sequential(
                 nn.ConvTranspose2d(feature_dimension, img_dimension * 8, 4, 1, 0, bias=False),
                 nn.BatchNorm2d(img_dimension * 8),
-                nn.ReLU(True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 # nn.ConvTranspose2d(img_dimension*8, img_dimension * 8, 4, 2, 1, bias=False),
                 # nn.BatchNorm2d(img_dimension * 8),
                 # nn.ReLU(True),
                 nn.ConvTranspose2d(img_dimension * 8, img_dimension * 4, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension * 4),
-                nn.ReLU(True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.ConvTranspose2d(img_dimension * 4, img_dimension * 2, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension * 2),
-                nn.ReLU(True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.ConvTranspose2d(img_dimension * 2,     img_dimension, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension),
-                nn.ReLU(True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.ConvTranspose2d(img_dimension,      3, 4, 2, 1, bias=False),
                 # nn.Sigmoid()
             )
@@ -92,21 +94,21 @@ class ImageDecoder(nn.Module):
             self.main = nn.Sequential(
                 nn.ConvTranspose2d(feature_dimension, img_dimension * 8, 4, 1, 0, bias=False),
                 nn.BatchNorm2d(img_dimension * 8),
-                nn.ReLU(True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.ConvTranspose2d(img_dimension*8, img_dimension * 8, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension * 8),
-                nn.ReLU(True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.ConvTranspose2d(img_dimension * 8, img_dimension * 4, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension * 4),
-                nn.ReLU(True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.ConvTranspose2d(img_dimension * 4, img_dimension * 2, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension * 2),
-                nn.ReLU(True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.ConvTranspose2d(img_dimension * 2,     img_dimension, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(img_dimension),
-                nn.ReLU(True),
+                nn.LeakyReLU(reluBeta, inplace=True),
                 nn.ConvTranspose2d(img_dimension,      3, 4, 2, 1, bias=False),
-                # nn.Sigmoid()
+                nn.Tanh()
             )
 
     def forward(self, input):

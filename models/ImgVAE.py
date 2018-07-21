@@ -47,7 +47,7 @@ class ImgVAE(nn.Module):
             nn.BatchNorm2d(img_dimension),
             nn.ReLU(True),
             nn.ConvTranspose2d(img_dimension,      3, 4, 2, 1, bias=False),
-            # nn.Tanh()
+            nn.Tanh()
         )
 
         self.hidden2mean = nn.Linear(self.hidden_size, latent_size)

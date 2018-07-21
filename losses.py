@@ -73,14 +73,21 @@ def img_vae_loss(recon_x, x, mu, logvar):
     flat_x = x.view(-1, flat_dim)
 
     # BCE = F.binary_cross_entropy(flat_rc_x, flat_x, size_average=False)
-    BCE = F.mse_loss(flat_rc_x, flat_x, size_average=False)
+
+
+    RC = torch.sum(torch.abs(flat_rc_x - flat_x))
+
+    # L2 loss too blurry
+    # RC = F.mse_loss(flat_rc_x, flat_x, size_average=False)
+
+
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
     # https://arxiv.org/abs/1312.6114
     # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     # return BCE + KLD
-    return (BCE + 3 * KLD)
+    return (RC + 3 * KLD)
 
 
 
@@ -182,19 +189,25 @@ def calc_gradient_penalty(netD, real_data, fake_data):
     alpha = alpha.view(real_data.size())
 
     # alpha = alpha.expand(BATCH_SIZE, real_data.nelement()/BATCH_SIZE).contiguous().view(BATCH_SIZE, 3, 64, 64)
-    alpha = Variable(alpha.cuda())
+    alpha = Variable(alpha.cuda(), requires_grad = True)
 
     interpolates = alpha * real_data + ((1 - alpha) * fake_data)
 
     interpolates = interpolates.cuda()
     # interpolates = Variable(interpolates, requires_grad=True)
+    # interpolates.weights.requires_grad = True
 
     disc_interpolates = netD(interpolates)
 
     gradients = grad(outputs=disc_interpolates, inputs=interpolates,
                               grad_outputs=torch.ones(disc_interpolates.size()).cuda(),
-                              create_graph=True, retain_graph=True, only_inputs=True)[0]
+                              create_graph=True, retain_graph=True, only_inputs=True)[0].contiguous()
+
     gradients = gradients.view(gradients.size(0), -1)
+
+
+
+
 
     # Gradient Penalty
     LAMBDA = 10

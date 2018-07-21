@@ -128,10 +128,10 @@ def main():
         transforms.RandomCrop(args.crop_size),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize((.5,.5,.5),
-                             (.5, .5, .5))
-        # transforms.Normalize((0.485, 0.456, 0.406),
-        #                      (0.229, 0.224, 0.225))
+        # transforms.Normalize((.5,.5,.5),
+        #                      (.5, .5, .5))
+        transforms.Normalize((0.485, 0.456, 0.406),
+                             (0.229, 0.224, 0.225))
         ])
 
     #</editor-fold>
@@ -192,8 +192,6 @@ def main():
         # TRAINING TIME
         print('EPOCH ::: TRAINING ::: ' + str(epoch + 1))
         batch_time = AverageMeter()
-        txt_losses = AverageMeter()
-        img_losses = AverageMeter()
         cm_losses = AverageMeter()
         end = time.time()
 
@@ -210,6 +208,7 @@ def main():
 
             img_rc_loss, txt_rc_loss = model_trainer.train(images, captions, lengths, not i % args.image_save_interval)
 
+
             txt_losses.update(txt_rc_loss.data[0],args.batch_size)
             img_losses.update(img_rc_loss.data[0],args.batch_size)
             # cm_losses.update(cm_loss.data[0], args.batch_size)
@@ -218,16 +217,14 @@ def main():
             end = time.time()
 
             # plot progress
-            bar.suffix = '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss_Img: {img_l:.3f}| Loss_Txt: {txt_l:.3f} | Loss_CM: {cm_l:.4f}'.format(
+            bar_suffix = '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:}'.format(
                 batch=i,
                 size=len(data_loader),
                 bt=batch_time.avg,
                 total=bar.elapsed_td,
-                eta=bar.eta_td,
-                img_l=img_losses.avg,
-                txt_l=txt_losses.avg,
-                cm_l=cm_losses.avg,
-                )
+                eta=bar.eta_td,)
+
+
             bar.next()
 
         # </editor-fold desc = "Logging">
