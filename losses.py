@@ -214,3 +214,16 @@ def calc_gradient_penalty(netD, real_data, fake_data):
     gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * LAMBDA
 
     return gradient_penalty
+
+def recon_loss_txt(input, target):
+    input_flat = input.view(-1, input.size(-1))
+    NLL = torch.nn.NLLLoss(size_average=False, ignore_index=0)
+
+    target_flat = target.contiguous().view(-1)
+    return NLL(input_flat, target_flat).mean(0)
+
+def recon_loss_img(input, target):
+    # input_flat = input.view(-1, input.size(-1))
+    # target_flat = target.view(-1, target.size(-1))
+
+    return torch.abs(input - target).mean()

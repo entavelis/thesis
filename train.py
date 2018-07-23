@@ -48,7 +48,7 @@ parser.add_argument('--image_save_interval', type=int, default=1000,
 parser.add_argument('--model_save_interval', type=int, default=10000,
                     help='Save models every model_save_interval iterations.')
 
-parser.add_argument('--model_path', type=str, default='./models/',
+parser.add_argument('--model_path', type=str, default='./results/',
                     help='path for saving trained models')
 
 parser.add_argument('--crop_size', type=int, default=64, #224
@@ -76,9 +76,9 @@ parser.add_argument('--save_step', type=int, default=1000,
 
 # Model parameters
 parser.add_argument('--word_embedding_size', type=int, default=300)
-parser.add_argument('--hidden_size', type=int, default=1024,
+parser.add_argument('--hidden_size', type=int, default=512,
                     help='dimension of lstm hidden states')
-parser.add_argument('--latent_size', type=int, default=100,
+parser.add_argument('--latent_size', type=int, default=300,
                     help='dimension of latent vector z')
 parser.add_argument('--num_layers', type=int, default=1,
                     help='number of layers in lstm')
@@ -87,7 +87,7 @@ parser.add_argument('--fixed_embeddings', type=str, default="true")
 parser.add_argument('--num_epochs', type=int, default=20)
 parser.add_argument('--batch_size', type=int, default= 64)
 parser.add_argument('--num_workers', type=int, default=2)
-parser.add_argument('--learning_rate', type=float, default=0.001)
+parser.add_argument('--learning_rate', type=float, default=0.0001)
 
 parser.add_argument('--text_criterion', type=str, default='NLLLoss')
 parser.add_argument('--cm_criterion', type=str, default='Cosine')
@@ -117,6 +117,8 @@ def main():
         trainer = coupled_vae_trainer.coupled_vae_trainer
     elif args.method == "wgan":
         trainer = wgan_trainer.wgan_trainer
+    elif args.method == "seq_wgan":
+        trainer = seq_wgan_trainer.wgan_trainer
     else:
         assert True, "Invalid method"
 
@@ -239,7 +241,7 @@ def main():
             for l_name, l_value in model_trainer.losses.items():
                 bar.suffix += ' | {name}: {val:.3f}'.format(
                     name = l_name,
-                    val= l_value.avg,
+                    val= l_value.val,
                 )
 
             bar.next()

@@ -1,7 +1,7 @@
 import os
 import torch.optim as optim
-from models.ImageAutoEncoder import ImageDecoder
-from models.ImgDiscriminator import *
+from models.TxtGenerator import TextDecoder
+from models.SeqDiscriminator import *
 
 from losses import *
 from trainers.trainer import trainer
@@ -14,10 +14,10 @@ class wgan_trainer(trainer):
         super(wgan_trainer, self).__init__(args, embedding, vocab)
 
         # Setting up the networks
-        self.networks["generator"] = ImageDecoder(feature_dimension=args.latent_size,
-                                                  img_dimension= args.crop_size)
-
-        self.networks["discriminator"] = ImgDiscriminator(args.crop_size)
+        # self.networks["generator"] = TextDecoder(len(vocab),
+        #                                           img_dimension= args.crop_size)
+        #
+        # self.networks["discriminator"] = ImgDiscriminator(args.crop_size)
 
 
         # Setting up the optimizers
@@ -63,7 +63,7 @@ class wgan_trainer(trainer):
                 p.requires_grad = False  # they are set to False below in netG update
 
             self.train_G(epoch, images, captions, lengths)
-            # self.optimizers["generator"].step()
+            self.optimizers["generator"].step()
             #
             for p in self.networks["discriminator"].parameters():  # reset requires_grad
                 p.requires_grad = True  # they are set to False below in netG update

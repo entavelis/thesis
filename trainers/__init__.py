@@ -1,1 +1,1 @@
-__all__ = ["coupled_vae_trainer", "coupled_vae_gan_trainer", "wgan_trainer"]
+__all__ = ["coupled_vae_trainer", "coupled_vae_gan_trainer", "wgan_trainer","seq_wgan_trainer"]

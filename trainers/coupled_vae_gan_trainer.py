@@ -31,11 +31,16 @@ class coupled_vae_gan_trainer(trainer):
                                                     lr=args.learning_rate, betas=(0.5, 0.999), weight_decay=0.00001)
 
         self.optimizers["discriminators"] = optim.Adam(chain(self.networks["img_discriminator"].parameters(),\
-                                                             self.networks["txt_discriminator"].parameters(),),\
+                                                    valid_params(self.networks["txt_discriminator"].parameters()),),\
                                                     lr=args.learning_rate, betas=(0.5, 0.999), weight_decay=0.00001)
 
         # Setting up the losses
-        self.create_losses_meter(["VAE_loss", "DIS_loss"])
+        self.create_losses_meter(["Ls_D_img", "Ls_D_img",
+                                  "Ls_G_img",  "Ls_G_img",
+                                  "Ls_D_img_rl", "Ls_D_img_rl",
+                                  "Ls_D_img_fk","Ls_D_img_fk",
+                                  "Ls_GP_img", "Ls_GP_img",
+                                  "Ls_VAE"])
 
         self.one = torch.FloatTensor([1])
         self.mone = self.one * -1
@@ -54,6 +59,130 @@ class coupled_vae_gan_trainer(trainer):
             self.load_vae(args.load_vae)
 
     def forward(self, epoch, images, captions, lengths, save_images):
+
+        if self.iteration < 2500:
+            cycle = 101
+        else:
+            cycle = 6
+
+        # train_gen = self.iteration > 500 and self.iteration % 6
+        if not self.iteration % cycle:
+             #
+            for p in self.networks["img_discriminator"].parameters():  # reset requires_grad
+                p.requires_grad = False  # they are set to False below in netG update
+            for p in self.networks["txt_discriminator"].parameters():  # reset requires_grad
+                p.requires_grad = False  # they are set to False below in netG update
+
+            self.train_G(epoch, images, captions, lengths)
+            self.optimizers["generator"].step()
+            #
+            for p in self.networks["img_discriminator"].parameters():  # reset requires_grad
+                p.requires_grad = True  # they are set to False below in netG update
+            for p in self.networks["txt_discriminator"].parameters():  # reset requires_grad
+                p.requires_grad = True  # they are set to False below in netG update
+        else:
+
+            self.train_D(epoch, images, captions, lengths)
+
+        self.iteration += 1
+        # Log Losses:
+        # self.losses["GEN_loss"].update(self.gen_loss.data[0],self.args.batch_size)
+        # self.losses["DIS_loss"].update(self.dis_loss.data[0],self.args.batch_size)
+
+        # if save_images:
+        #     self.save_samples(images[0], self.networks["generator"](self.fixed_noise)[0], captions[0], captions[0])
+
+
+
+    def train_D(self,epoch, images, captions, lengths):
+
+        # clamp parameters to a cube
+        for p in self.networks["img_discriminator"].parameters():
+            p.data.clamp_(-0.01, 0.01)
+
+        # clamp parameters to a cube
+        for p in self.networks["txt_discriminator"].parameters():
+            p.data.clamp_(-0.01, 0.01)
+
+        # train with real
+        self.networks["img_discriminator"].zero_grad()
+        self.networks["txt_discriminator"].zero_grad()
+
+        errD_img_real = self.networks["img_discriminator"](images)
+        errD_img_real.backward(self.one)
+
+        errD_txt_real = self.networks["txt_discriminator"](captions)
+        errD_txt_real.backward(self.one)
+
+        # train with fake
+        img2img_out, txt2img_out, img2txt_out, txt2txt_out, img_mu, img_logv, img_z, txt_mu, txt_logv, txt_z = \
+                                 self.networks["coupled_vae"](images.detach(),captions.detach(), lengths)
+
+        errD_img_fake = self.networks["img_discriminator"](txt2img_out)
+        errD_img_fake.backward(self.mone)
+
+        errD_txt_fake = self.networks["txt_discriminator"](img2txt_out)
+        errD_txt_fake.backward(self.mone)
+
+        errGP_img = calc_gradient_penalty(self.networks["img_discriminator"], images, txt2img_out)
+        errGP_img.backward()
+
+        errGP_txt = calc_gradient_penalty(self.networks["txt_discriminator"], captions, img2txt_out)
+        errGP_txt.backward()
+
+        errD_img = errD_img_real - errD_img_fake + errGP_img
+        errD_txt = errD_txt_real - errD_txt_fake + errGP_txt
+        self.optimizers["discriminator"].step()
+
+        self.losses["Ls_D_img"].update(errD_img.data[0], self.args.batch_size)
+        self.losses["Ls_D_txt"].update(errD_txt.data[0], self.args.batch_size)
+        self.losses["Ls_D_img_fk"].update(errD_img_fake.data[0], self.args.batch_size)
+        self.losses["Ls_D_txt_fk"].update(errD_txt_fake.data[0], self.args.batch_size)
+        self.losses["Ls_D_img_rl"].update(errD_img_real.data[0], self.args.batch_size)
+        self.losses["Ls_D_txt_rl"].update(errD_txt_real.data[0], self.args.batch_size)
+        self.losses["Ls_GP_img"].update(errGP_img.data[0], self.args.batch_size)
+        self.losses["Ls_GP_txt"].update(errGP_txt.data[0], self.args.batch_size)
+
+        # Gradient Penalty
+
+       # img_gp = calc_gradient_penalty(self.networks["discriminator"], images, img_gen)
+
+
+    def train_G(self,epoch, images, captions, lengths):
+        self.networks["coupled_vae"].zero_grad()
+        # in case our last batch was the tail batch of the dataloader,
+        # make sure we feed a full batch of noise
+        img2img_out, txt2img_out, img2txt_out, txt2txt_out, img_mu, img_logv, img_z, txt_mu, txt_logv, txt_z = \
+            self.networks["coupled_vae"](images, captions, lengths)
+
+        errG_img = self.networks["img_discriminator"](txt2img_out)
+        errG_img.backward(self.one)
+
+        errG_txt = self.networks["txt_discriminator"](img2txt_out)
+        errG_txt.backward(self.one)
+
+         # KL divergence for VAEs
+        lambda_KL = 0.1
+        errKL_img = kl_loss(img_mu, img_logv).mean(0)
+        errKL_txt = kl_loss(txt_mu, txt_logv).mean(0)
+
+        # Reconstruction error
+        lambda_RC = 100
+        errRC_img = recon_loss_img(img2img_out, target=images)
+        errRC_txt = recon_loss_txt(txt2txt_out, target=captions)
+
+        vae_loss = lambda_KL * (errKL_img + errKL_txt) + lambda_RC * (errRC_img + errRC_txt)
+        vae_loss.backward(retain_graph = True)
+
+
+
+        self.optimizers["coupled_vae"].step()
+        self.losses["Ls_G_img"].update(errG_img.data[0], self.args.batch_size)
+        self.losses["Ls_G_txt"].update(errG_txt.data[0], self.args.batch_size)
+        self.losses["Ls_VAE"].update(vae_loss.data[0], self.args.batch_size)
+
+    def forward_old(self, epoch, images, captions, lengths, save_images):
+
 
         train_gen = self.iteration % 5
         # Forward, Backward and Optimize

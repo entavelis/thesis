@@ -20,17 +20,21 @@ class SeqDiscriminator(nn.Module):
 
         self.num_layers = num_layers
         self.hidden_size = hidden_size
+        self.embedding = embedding
 
         embedding_size = embedding.embedding_dim
 
         self.rnn = nn.GRU(embedding_size, hidden_size, num_layers=num_layers, bidirectional=False, batch_first=True)
-        self.fc = nn.Linear(hidden_size,1)
+        self.fc = nn.Linear(embedding_size,1)
 
     def forward(self,input):
-        output, hidden = self.rnn(input)
-        pred = self.fc(hidden[:,-1,:])
 
-        return torch.sigmoid(pred)
+        input_emb = torch.mm(input.view(-1,input.size(-1)), self.embedding.weight)\
+            .view(input.size(0),-1, self.embedding.embedding_dim)
+        output, hidden = self.rnn(input_emb)
+        pred = self.fc(output[:,-1,:])
+
+        return torch.sigmoid(pred).mean(0) # .view(1)
 
 
 

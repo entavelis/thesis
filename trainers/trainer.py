@@ -124,8 +124,8 @@ class trainer( object ):
     def save_losses(self):
         with open(os.path.join(self.result_path,"losses.csv") , "a") as text_file:
             toWrite= str(self.iteration)
-            for _, l_value in self.losses.items():
-                toWrite = ' , {}'.format(l_value.avg)
+            for l_value in self.losses.values():
+                toWrite = ' , {}'.format(l_value.val)
             text_file.write(toWrite + "\n")
 
 
@@ -133,6 +133,8 @@ class trainer( object ):
         toWrite = "Iteration"
         for name in losses_name_list:
             self.losses[name] = AverageMeter()
+
+        for name in self.losses.keys():
             toWrite += ", " + name
         toWrite +="\n"
 

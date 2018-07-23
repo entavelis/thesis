@@ -4,8 +4,6 @@ import torch.nn as nn
 import torch.nn.utils.rnn as rnn_utils
 from utils import to_var
 from utils import gumbel_softmax
-import torch.nn.functional as F
-from torch.autograd import Variable
 
 class CoupledVAE(nn.Module):
     def __init__(self,  embedding, vocab_size,
@@ -21,7 +19,6 @@ class CoupledVAE(nn.Module):
                 pad_idx = 0,
                 max_sequence_length = 30,
                 batch_size = 128,
-                mask = 0.3,
                 drop_out = 0.3,
                 averaged_output = False):
 
@@ -32,17 +29,11 @@ class CoupledVAE(nn.Module):
         # like rnn-wgan
         self.averaged_output = True
 
-        self.vocab_size = vocab_size
-
         self.batch_size = batch_size
         self.max_sequence_length = max_sequence_length
         self.sos_idx = sos_idx
         self.eos_idx = eos_idx
         self.pad_idx = pad_idx
-
-        self.mask = mask
-        self.common_z_size = int(mask * latent_size)
-        self.left_z_size = latent_size - self.common_z_size
 
         self.hidden_size = hidden_size
         self.latent_size = latent_size
@@ -119,11 +110,9 @@ class CoupledVAE(nn.Module):
         self.hidden2logv = nn.Linear(self.hidden_size, latent_size)
         self.latent2hidden = nn.Linear(latent_size, self.hidden_size)
 
-        self.img_noise = torch.FloatTensor(self.batch_size, self.left_z_size).cuda()
-        self.txt_noise = torch.FloatTensor(self.batch_size, self.left_z_size).cuda()
 
 
-    def forward(self, input_images, input_captions, lengths):
+    def forward(self, input_images, input_captions, lengths, swapped):
         sorted_idx, self.packed_input = self.prepare_input(input_captions, lengths)
 
         img_enc = self.img_encoder_forward(input_images)
@@ -132,28 +121,17 @@ class CoupledVAE(nn.Module):
         img_mu, img_logv, img_z = self.Hidden2Z(img_enc)
         txt_mu, txt_logv, txt_z = self.Hidden2Z(txt_enc)
 
-        hidden4img2img = self.Z2Hidden(img_z)
-        hidden4txt2txt = self.Z2Hidden(txt_z)
+        if swapped:
+            hidden4img = self.Z2Hidden(txt_z)
+            hidden4txt = self.Z2Hidden(img_z)
+        else:
+            hidden4img = self.Z2Hidden(img_z)
+            hidden4txt = self.Z2Hidden(txt_z)
 
-        img_noise = to_var(self.img_noise.resize_(self.batch_size, self.left_z_size).normal_(0,1))
-        txt_noise = to_var(self.txt_noise.resize_(self.batch_size, self.left_z_size ).normal_(0,1))
+        img_out = self.img_decoder_forward(hidden4img)
+        txt_out = self.txt_decoder_forward(hidden4txt , self.packed_input, sorted_idx)
 
-        hidden4txt2img = self.Z2Hidden(torch.cat((txt_z[:,:self.common_z_size], img_noise),1))
-
-        hidden4img2txt = self.Z2Hidden(torch.cat((img_z[:,:self.common_z_size], txt_noise),1))
-
-
-        # for AE
-        img2img_out = self.img_decoder_forward(hidden4img2img)
-        # txt2txt_out = self.txt_decoder_forward(hidden4txt2txt) # try_decoder
-        txt2txt_out = self.gumbel_decoder(hidden4txt2txt, input_captions.size(1)) # try_decoder
-
-        # for discriminator
-        txt2img_out = self.img_decoder_forward(hidden4txt2img)
-        img2txt_out = self.gumbel_decoder(hidden4img2txt, input_captions.size(1))
-
-
-        return img2img_out, txt2img_out, img2txt_out, txt2txt_out, img_mu, img_logv, img_z, txt_mu, txt_logv, txt_z
+        return img_out, img_mu, img_logv, img_z, txt_out, txt_mu, txt_logv, txt_z
 
     def Hidden2Z(self, hidden):
         mu = self.hidden2mean(hidden)
@@ -242,10 +220,11 @@ class CoupledVAE(nn.Module):
 
         return img_mu, img_logv, img_z, txt_mu, txt_logv, txt_z
 
-    def gumbel_decoder(self, hidden, max_sequence_length):
+    def gumbel_decoder(self, z=None):
 
         batch_size = self.batch_size
 
+        hidden = self.latent2hidden(z)
 
         if self.bidirectional or self.num_layers > 1:
             # unflatten hidden state
@@ -260,61 +239,44 @@ class CoupledVAE(nn.Module):
 
         running_seqs = torch.arange(0, batch_size, out=self.tensor()).long() # idx of still generating sequences with respect to current loop
 
-        # generations = self.tensor(batch_size, self.max_sequence_length).fill_(self.pad_idx).long()
-        # generations = self.tensor(batch_size, max_sequence_length, self.vocab_size).fill_(self.pad_idx).float()
-        generations = torch.zeros(batch_size, max_sequence_length, self.vocab_size).float()
-        generations[:,:,0] = 1.0
-        generations = to_var(generations)
-        generations.requires_grad = True
-
-        # generations.scatter_(1,0,1.0)
+        generations = self.tensor(batch_size, self.max_sequence_length).fill_(self.pad_idx).long()
 
         t=0
-        while(t<max_sequence_length and len(running_seqs)>0):
+        while(t<self.max_sequence_length and len(running_seqs)>0):
 
             if t == 0:
                 input_sequence = to_var(torch.Tensor(batch_size).fill_(self.sos_idx).long())
-                input_sequence = input_sequence.unsqueeze(1)
 
-                input_embedding = self.embedding(input_sequence)
+            input_sequence = input_sequence.unsqueeze(1)
+
+            input_embedding = self.embedding(input_sequence)
 
             output, hidden = self.decoder_rnn(input_embedding, hidden)
 
-            logits = F.log_softmax(self.outputs2vocab(output),2)
+            logits = self.outputs2vocab(output)
 
             # input_sequence = self._sample(logits)
-            input_sequence = gumbel_softmax(logits.squeeze()).unsqueeze(1)
+            input_sequence = gumbel_softmax(logits)
 
             # save next input
             generations = self._save_sample(generations, input_sequence, sequence_running, t)
 
-            # update global running sequence
-            _, input_sequence_top = torch.topk(input_sequence, 1)
-            sequence_mask[sequence_running] = (input_sequence_top.squeeze() != self.eos_idx).data
+            # update gloabl running sequence
+            sequence_mask[sequence_running] = (input_sequence != self.eos_idx).data
             sequence_running = sequence_idx.masked_select(sequence_mask)
 
             # update local running sequences
-            running_mask = (input_sequence_top.squeeze() != self.eos_idx).data
+            running_mask = (input_sequence != self.eos_idx).data
             running_seqs = running_seqs.masked_select(running_mask)
 
             # prune input and hidden state according to local update
             if len(running_seqs) > 0:
                 input_sequence = input_sequence[running_seqs]
                 hidden = hidden[:, running_seqs]
-                input_embedding = torch.mm(input_sequence.squeeze(), self.embedding.weight).unsqueeze(1)
 
                 running_seqs = torch.arange(0, len(running_seqs), out=self.tensor()).long()
 
             t += 1
 
-        return generations
+        return generations, z
 
-    def _save_sample(self, save_to, sample, running_seqs, t):
-        # select only still running
-        running_latest = save_to[running_seqs]
-        # update token at position t
-        running_latest[:,t] = sample # .data
-        # save back
-        save_to[running_seqs] = running_latest
-
-        return save_to
