@@ -44,32 +44,15 @@ def pad_sequences(seqs,lens):
 def valid_params(params):
     return [p for p in params if p.requires_grad]
 
-class embedding(nn.Embedding):
-
-
-    def __init__(self, num_embeddings, embedding_dim, padding_idx=None,
-                 max_norm=None, norm_type=2, scale_grad_by_freq=False,
-                 sparse=False, _weight=None):
-        super(embedding, self).__init__(num_embeddings, embedding_dim, padding_idx, max_norm,
-                 sparse, _weight)
-
-        self.embedding_size = embedding_dim
-
-# class embedding(object):
-#     def __init__(self, wrapped_class, *args, **kargs):
-#         self.wrapped_class = wrapped_class(*args, **kargs)
-#
-#     def __getattr__(self,attr):
-#         if attr=="embedding_size":
-#             return self.wrapped_class.__getattribute__("embedding_dim")
-#
-#         orig_attr =  self.wrapped_class.__getattribute__(attr)
-#         if callable(orig_attr):
-#             return orig_attr(*args, **kwargs)
-#         else:
-#             return orig_attr
-
-
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 # From pytorch functional
 
@@ -129,7 +112,8 @@ def gumbel_softmax(logits, tau=1, hard=False, eps=1e-10):
         _, k = y_soft.max(-1)
         # this bit is based on
         # https://discuss.pytorch.org/t/stop-gradients-for-st-gumbel-softmax/530/5
-        y_hard = logits.new_zeros(*shape).scatter_(-1, k.view(-1, 1), 1.0)
+        # y_hard = logits.new_zeros(*shape).scatter_(-1, k.view(-1, 1), 1.0)
+        y_hard = torch.zeros(*shape).cuda().scatter_(-1, k.view(-1, 1).data, 1.0)
         # this cool bit of code achieves two things:
         # - makes the output value exactly one-hot (since we add then
         #   subtract y_soft value)
@@ -139,3 +123,18 @@ def gumbel_softmax(logits, tau=1, hard=False, eps=1e-10):
     else:
         y = y_soft
     return y
+
+def add_gaussian(input, std = 0.05):
+    input = input + Variable(input.data.new(input.size()).normal_(0,std))
+    return input
+
+def get_gen_lengths(input, eos_idx = 2):
+    gen_lens = to_var(torch.zeros(input.size(0)).long())
+    not_found = to_var(torch.ones(input.size(0)).byte())
+    for word_i in range(input.size(1)):
+        _, maxarg = torch.topk(input[:,word_i,:], 1, -1)
+        gen_lens += not_found.long()
+        not_found = not_found & (maxarg.squeeze() != eos_idx)
+
+    return gen_lens
+

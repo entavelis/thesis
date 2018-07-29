@@ -1,8 +1,10 @@
-import matplotlib.pyplot as plt
+
 import torch
 import os
 import scipy
 from pytorch_classification.utils import AverageMeter
+import csv
+
 class trainer( object ):
     """Some description that tells you it's abstract,
     often listing the methods you're expected to supply."""
@@ -27,6 +29,7 @@ class trainer( object ):
         if result_path == "NONE":
             self.result_path = self.model_path + "samples/"
 
+
         if not os.path.exists(self.result_path):
             os.makedirs(self.result_path)
         if not os.path.exists(self.model_path):
@@ -37,6 +40,8 @@ class trainer( object ):
         self.save_counter = 1
         self.iteration = 0
 
+        self.save_options()
+
     def train(self):
         raise NotImplementedError( "Should have implemented this" )
 
@@ -45,7 +50,7 @@ class trainer( object ):
 
     def load_models(self, epoch):
         if self.keep_loading:
-            for name, network in self.networks:
+            for name, network in self.networks.items():
                 suffix = name + "-" + str(epoch) + ".pkl"
                 try:
                     network.load_state_dict(torch.load(os.path.join(self.model_path, suffix)))
@@ -55,6 +60,7 @@ class trainer( object ):
                     self.keep_loading = False
                     return False
 
+            print("Model loaded for epoch ", epoch)
             return True
         return False
 
@@ -105,7 +111,12 @@ class trainer( object ):
 
         try:
             txt_or = " ".join([self.vocab.idx2word[c] for c in caption.cpu().data.numpy()])
-            _, generated = torch.topk(txt_out, 1)
+        except:
+            _, generated = torch.topk(caption,1)
+            txt_or = " ".join([self.vocab.idx2word[c] for c in generated[:,0].cpu().data.numpy()])
+
+        try:
+            _, generated = torch.topk(txt_out,1)
             txt = " ".join([self.vocab.idx2word[c] for c in generated[:,0].cpu().data.numpy()])
 
             with open(filename_prefix + "_captions.txt", "w") as text_file:
@@ -125,7 +136,7 @@ class trainer( object ):
         with open(os.path.join(self.result_path,"losses.csv") , "a") as text_file:
             toWrite= str(self.iteration)
             for l_value in self.losses.values():
-                toWrite = ' , {}'.format(l_value.val)
+                toWrite += ' , {}'.format(l_value.avg)
             text_file.write(toWrite + "\n")
 
 
@@ -140,3 +151,9 @@ class trainer( object ):
 
         with open(os.path.join(self.result_path,"losses.csv") , "w") as text_file: text_file.write(toWrite)
 
+    def save_options(self):
+        temp = self.args.__dict__
+        with open(os.path.join(self.result_path,"arguments.csv") , 'w') as f:  # Just use 'w' mode in 3.x
+            w = csv.writer(f)
+            # w.writeheader()
+            w.writerows(temp.items())

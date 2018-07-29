@@ -14,6 +14,24 @@ def mse_loss(input, target, sim=None):
 # def cosine_loss(input,target,sim=None);
 
 # source: https://github.com/howardyclo/pytorch-seq2seq-example/blob/master/seq2seq.ipynb
+def sequence_mask(sequence_length, max_len=None):
+    """
+    Caution: Input and Return are VARIABLE.
+    """
+    if max_len is None:
+        max_len = sequence_length.data.max()
+    batch_size = sequence_length.size(0)
+    seq_range = torch.arange(0, max_len).long()
+    seq_range_expand = seq_range.unsqueeze(0).expand(batch_size, max_len)
+    seq_range_expand = Variable(seq_range_expand)
+    if sequence_length.is_cuda:
+        seq_range_expand = seq_range_expand.cuda()
+    seq_length_expand = (sequence_length.unsqueeze(1)
+                         .expand_as(seq_range_expand))
+    mask = seq_range_expand < seq_length_expand
+
+    return mask
+
 def masked_cross_entropy(logits, target, length):
     """
     Args:
@@ -49,6 +67,57 @@ def masked_cross_entropy(logits, target, length):
     mask = sequence_mask(sequence_length=length, max_len=target.size(1))
     # Note: mask need to bed casted to float!
     losses = losses * mask.float()
+    loss = losses.sum() #/ mask.float().sum()
+
+    # (batch_size * max_tgt_len,)
+    pred_flat = log_probs_flat.max(1)[1]
+    # (batch_size * max_tgt_len,) => (batch_size, max_tgt_len) => (max_tgt_len, batch_size)
+    pred_seqs = pred_flat.view(*target.size()).transpose(0, 1).contiguous()
+    # (batch_size, max_len) => (batch_size * max_tgt_len,)
+    mask_flat = mask.view(-1)
+
+    # `.float()` IS VERY IMPORTANT !!!
+    # https://discuss.pytorch.org/t/batch-size-and-validation-accuracy/4066/3
+    num_corrects = int(pred_flat.eq(target_flat.squeeze(1)).masked_select(mask_flat).float().data.sum())
+    num_words = length.data.sum()
+
+    return loss #, pred_seqs, num_corrects, num_words
+
+def masked_nll(logits, target, length):
+    """
+    Args:
+        logits: A Variable containing a FloatTensor of size
+            (batch, max_len, num_classes) which contains the
+            unnormalized probability for each class.
+        target: A Variable containing a LongTensor of size
+            (batch, max_len) which contains the index of the true
+            class for each corresponding step.
+        length: A Variable containing a LongTensor of size (batch,)
+            which contains the length of each data in a batch.
+    Returns:
+        loss: An average loss value masked by the length.
+
+    The code is same as:
+
+    weight = torch.ones(tgt_vocab_size)
+    weight[padding_idx] = 0
+    criterion = nn.CrossEntropyLoss(weight.cuda(), size_average)
+    loss = criterion(logits_flat, losses_flat)
+    """
+    # logits_flat: (batch * max_len, num_classes)
+    log_probs_flat = logits.view(-1, logits.size(-1))
+    # log_probs_flat: (batch * max_len, num_classes)
+    # log_probs_flat = F.log_softmax(logits_flat)
+    # target_flat: (batch * max_len, 1)
+    target_flat = target.view(-1, 1)
+    # losses_flat: (batch * max_len, 1)
+    losses_flat = -torch.gather(log_probs_flat, dim=1, index=target_flat)
+    # losses: (batch, max_len)
+    losses = losses_flat.view(*target.size())
+    # mask: (batch, max_len)
+    mask = sequence_mask(sequence_length=length, max_len=target.size(1))
+    # Note: mask need to bed casted to float!
+    losses = losses * mask.float()
     loss = losses.sum() / mask.float().sum()
 
     # (batch_size * max_tgt_len,)
@@ -72,7 +141,7 @@ def img_vae_loss(recon_x, x, mu, logvar):
     flat_rc_x = recon_x.view(-1, flat_dim)
     flat_x = x.view(-1, flat_dim)
 
-    # BCE = F.binary_cross_entropy(flat_rc_x, flat_x, size_average=False)
+    # RC = F.binary_cross_entropy(flat_rc_x, flat_x, size_average=False)
 
 
     RC = torch.sum(torch.abs(flat_rc_x - flat_x))
@@ -98,17 +167,19 @@ def kl_anneal_function(anneal_function, step, k, x0):
         return min(1, step/x0)
 
 def kl_loss(mean, logv):
-    return -0.5 * torch.sum(1 + logv - mean.pow(2) - logv.exp())
+    kl =  -0.5 * torch.sum(1 + logv - mean.pow(2) - logv.exp())
+    return kl/mean.size(0)
 
 def seq_vae_loss(logp, target, length, mean, logv, anneal_function, step, k, x0):
         # cut-off unnecessary padding from target, and flatten
-    NLL = torch.nn.NLLLoss(size_average=False, ignore_index=0)
+    # NLL = torch.nn.NLLLoss(size_average=False, ignore_index=0)
 
-    target = target[:, :torch.max(length).data[0]].contiguous().view(-1)
-    logp = logp.view(-1, logp.size(2))
+    # target = target[:, :torch.max(length).data[0]].contiguous().view(-1)
+    # logp = logp.view(-1, logp.size(2))
 
     # Negative Log Likelihood
-    NLL_loss = NLL(logp, target)
+    # NLL_loss = NLL(logp, target)
+    NLL_loss = masked_cross_entropy(logp, target, length)
 
     # KL Divergence
     KL_loss = -0.5 * torch.sum(1 + logv - mean.pow(2) - logv.exp())
@@ -179,19 +250,23 @@ def get_gan_loss(dis_real, dis_fake, criterion, cuda):
 
 
 # improved wgan in pytorch
-def calc_gradient_penalty(netD, real_data, fake_data):
+def calc_gradient_penalty(netD, real_data, fake_data, img = True):
     # print "real_data: ", real_data.size(), fake_data.size()
 
-    BATCH_SIZE = real_data.size(0)
+    BATCH_SIZE = fake_data.size(0)
     alpha = torch.rand(BATCH_SIZE, 1)
 
-    alpha = alpha.expand(BATCH_SIZE, real_data.nelement()//BATCH_SIZE).contiguous()
-    alpha = alpha.view(real_data.size())
+    alpha = alpha.expand(BATCH_SIZE, fake_data.nelement()//BATCH_SIZE).contiguous()
+    alpha = alpha.view(fake_data.size())
 
     # alpha = alpha.expand(BATCH_SIZE, real_data.nelement()/BATCH_SIZE).contiguous().view(BATCH_SIZE, 3, 64, 64)
     alpha = Variable(alpha.cuda(), requires_grad = True)
 
-    interpolates = alpha * real_data + ((1 - alpha) * fake_data)
+    if img:
+        interpolates = alpha * real_data + ((1 - alpha) * fake_data)
+    else:
+        real_one_hot = Variable(torch.zeros(fake_data.size()).cuda().scatter_(2,real_data.data.unsqueeze(2),1.))
+        interpolates = alpha * real_one_hot + ((1 - alpha) * fake_data)
 
     interpolates = interpolates.cuda()
     # interpolates = Variable(interpolates, requires_grad=True)
@@ -217,13 +292,25 @@ def calc_gradient_penalty(netD, real_data, fake_data):
 
 def recon_loss_txt(input, target):
     input_flat = input.view(-1, input.size(-1))
-    NLL = torch.nn.NLLLoss(size_average=False, ignore_index=0)
+    NLL = torch.nn.NLLLoss(size_average=True, ignore_index=0)
 
     target_flat = target.contiguous().view(-1)
-    return NLL(input_flat, target_flat).mean(0)
+    return NLL(input_flat, target_flat)
 
 def recon_loss_img(input, target):
     # input_flat = input.view(-1, input.size(-1))
     # target_flat = target.view(-1, target.size(-1))
 
     return torch.abs(input - target).mean()
+
+# From DiscoGAN
+def get_fm_loss(real_feats, fake_feats):
+    criterion = nn.HingeEmbeddingLoss()
+    losses = 0
+    for real_feat, fake_feat in zip(real_feats, fake_feats):
+        l2 = (real_feat.mean(0) - fake_feat.mean(0)) * (real_feat.mean(0) - fake_feat.mean(0))
+        loss = criterion( l2, Variable( torch.ones( l2.size() ) ).cuda() )
+        losses += loss
+
+    return losses
+

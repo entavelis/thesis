@@ -106,28 +106,3 @@ def get_loader(root, json, vocab, transform, batch_size, shuffle, num_workers):
                                               collate_fn=collate_fn)
     return data_loader
 
-def get_double_loader(train_root, val_root, json, vocab, transform, batch_size, shuffle, num_workers):
-    """Returns torch.utils.data.DataLoader for custom coco dataset."""
-    # COCO caption dataset
-    coco = CocoDataset(root=root,
-                       json=json,
-                       vocab=vocab,
-                       transform=transform)
-    
-    # Data loader for COCO dataset
-    # This will return (images, captions, lengths) for every iteration.
-    # images: tensor of shape (batch_size, 3, 224, 224).
-    # captions: tensor of shape (batch_size, padded_length).
-    # lengths: list indicating valid length for each caption. length is (batch_size).
-    train_loader = torch.utils.data.DataLoader(dataset=coco,
-                                              batch_size=batch_size,
-                                              shuffle=shuffle,
-                                              num_workers=num_workers,
-                                              collate_fn=collate_fn)
-    val_loader = torch.utils.data.DataLoader(dataset=coco,
-                                              batch_size=batch_size,
-                                              shuffle=shuffle,
-                                              num_workers=num_workers,
-                                              collate_fn=collate_fn)
-    test_loader
-    return data_loader
