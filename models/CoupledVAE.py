@@ -81,10 +81,10 @@ class CoupledVAE(nn.Module):
 
         self.hidden_factor = (2 if bidirectional else 1) * num_layers
 
-        if use_variational:
-            self.hidden2mean = nn.Linear(hidden_size * self.hidden_factor, latent_size)
-            self.hidden2logv = nn.Linear(hidden_size * self.hidden_factor, latent_size)
-            self.latent2hidden = nn.Linear(latent_size, hidden_size * self.hidden_factor)
+        # if use_variational:
+        #     self.hidden2mean = nn.Linear(hidden_size * self.hidden_factor, latent_size)
+        #     self.hidden2logv = nn.Linear(hidden_size * self.hidden_factor, latent_size)
+        #     self.latent2hidden = nn.Linear(latent_size, hidden_size * self.hidden_factor)
 
 
         self.outputs2vocab = nn.Linear(hidden_size * (2 if bidirectional else 1), vocab_size)
@@ -123,6 +123,7 @@ class CoupledVAE(nn.Module):
             nn.ReLU(True),
             nn.ConvTranspose2d(img_dimension,      3, 4, 2, 1, bias=False),
             nn.Tanh()
+            # nn.Sigmoid()
         )
 
         if use_variational:
@@ -134,18 +135,24 @@ class CoupledVAE(nn.Module):
             # self.batch_norm_txt = nn.BatchNorm1d(self.hidden_size)
             self.hidden2mean_txt = nn.Linear(self.hidden_size, latent_size)
             self.hidden2logv_txt = nn.Linear(self.hidden_size, latent_size)
-            self.latent2hidden_txt = nn.Linear(latent_size, self.hidden_size)
+            self.latent2hidden_txt4txt = nn.Linear(latent_size, self.hidden_size)
 
             if weight_sharing:
                 # self.batch_norm_img = self.batch_norm_txt
                 self.hidden2mean_img = self.hidden2mean_txt
                 self.hidden2logv_img = self.hidden2logv_txt
-                self.latent2hidden_img = self.latent2hidden_txt
+                self.latent2hidden_img4img = self.latent2hidden_txt4txt
+                self.latent2hidden_img4txt = self.latent2hidden_txt4txt
+                self.latent2hidden_txt4img = self.latent2hidden_txt4txt
+
+                self.latent2hidden_txt
             else:
                 # self.batch_norm_img = nn.BatchNorm1d(self.hidden_size)
                 self.hidden2mean_img = nn.Linear(self.hidden_size, latent_size)
                 self.hidden2logv_img = nn.Linear(self.hidden_size, latent_size)
-                self.latent2hidden_img = nn.Linear(latent_size, self.hidden_size)
+                self.latent2hidden_img4img = nn.Linear(latent_size, self.hidden_size)
+                self.latent2hidden_img4txt = nn.Linear(latent_size, self.hidden_size)
+                self.latent2hidden_txt4img = nn.Linear(latent_size, self.hidden_size)
 
         self.img_noise = torch.FloatTensor(self.batch_size, self.left_z_size).cuda()
         self.txt_noise = torch.FloatTensor(self.batch_size, self.left_z_size).cuda()
@@ -159,7 +166,7 @@ class CoupledVAE(nn.Module):
         # img_enc = self.batch_norm_img(img_enc)
         if self.use_variational:
             img_mu, img_logv, img_z = self.Hidden2Z_img(img_enc)
-            hidden4img2img = self.Z2Hidden_img(img_z)
+            hidden4img2img = self.Z2Hidden_img4img(img_z)
         else:
             hidden4img2img = img_enc
         img2img_out = self.img_decoder_forward(hidden4img2img)
@@ -169,7 +176,7 @@ class CoupledVAE(nn.Module):
         # txt_enc = self.batch_norm_txt(txt_enc)
         if self.use_variational:
             txt_mu, txt_logv, txt_z = self.Hidden2Z_txt(txt_enc)
-            hidden4txt2txt = self.Z2Hidden_txt(txt_z)
+            hidden4txt2txt = self.Z2Hidden_txt4txt(txt_z)
         else:
             hidden4txt2txt = txt_enc
         # txt2txt_out = self.gumbel_decoder(hidden4txt2txt, input_captions.size(1)) # try_decoder
@@ -179,7 +186,7 @@ class CoupledVAE(nn.Module):
         # Generation txt2img
         img_noise = to_var(self.img_noise.resize_(self.batch_size, self.left_z_size).normal_(0,1))
         if self.use_variational:
-            hidden4txt2img = self.Z2Hidden_img(torch.cat((txt_z[:,:self.common_z_size], img_noise),1))
+            hidden4txt2img = self.Z2Hidden_txt4img(torch.cat((txt_z[:,:self.common_z_size], img_noise),1))
         else:
             hidden4txt2img = torch.cat((txt_enc[:,:self.common_z_size], img_noise),1)
         txt2img_out = self.img_decoder_forward(hidden4txt2img)
@@ -187,7 +194,7 @@ class CoupledVAE(nn.Module):
         # Generation img2txt
         txt_noise = to_var(self.txt_noise.resize_(self.batch_size, self.left_z_size ).normal_(0,1))
         if self.use_variational:
-            hidden4img2txt = self.Z2Hidden_txt(torch.cat((img_z[:,:self.common_z_size], txt_noise),1))
+            hidden4img2txt = self.Z2Hidden_img4txt(torch.cat((img_z[:,:self.common_z_size], txt_noise),1))
         else:
             hidden4img2txt = torch.cat((img_enc[:,:self.common_z_size], txt_noise),1)
         # img2txt_out = self.gumbel_decoder(hidden4img2txt, input_captions.size(1))
@@ -262,14 +269,19 @@ class CoupledVAE(nn.Module):
 
         return mu, logv, z
 
-    def Z2Hidden_img(self, z):
-        return self.latent2hidden_img(z)
+    def Z2Hidden_txt4txt(self, z):
+        return self.latent2hidden_txt4txt(z)
 
-    def Z2Hidden_txt(self, z):
-        return self.latent2hidden_txt(z)
+    def Z2Hidden_img4img(self, z):
+        return self.latent2hidden_img4img(z)
+
+    def Z2Hidden_txt4img(self, z):
+        return self.latent2hidden_txt4img(z)
+
+    def Z2Hidden_img4txt(self, z):
+        return self.latent2hidden_img4txt(z)
 
     def img_encoder_forward(self, input):
-
         enc = self.encoder_cnn(input)
         enc = enc.view(self.batch_size,-1)
         return enc

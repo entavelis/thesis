@@ -71,6 +71,8 @@ class coupled_vae_gan_trainer(trainer):
         if args.load_vae != "NONE":
             self.load_vae(args.load_vae)
 
+        self.epoch_max_len = Variable(torch.zeros(self.args.batch_size).long().cuda())
+
     def forward(self, epoch, images, captions, lengths, save_images):
         self.iteration += 1
 
@@ -91,6 +93,9 @@ class coupled_vae_gan_trainer(trainer):
         if self.iteration < self.args.vae_pretrain_iterations:
             self.train_G(epoch,images,captions,lengths, pretrain= True)
             return
+
+        # self.epoch_max_len.fill_(5+int(epoch/2))
+        # lengths = torch.min(self.epoch_max_len, lengths)
 
         if self.iteration < self.args.vae_pretrain_iterations + self.args.disc_pretrain_iterations:
             cycle = 101
@@ -133,15 +138,14 @@ class coupled_vae_gan_trainer(trainer):
         self.networks_zero_grad()
         # clamp parameters to a cube
         for p in self.networks["img_discriminator"].parameters():
-            p.data.clamp_(-0.01, 0.01)
+            p.data.clamp_(- self.args.img_clamping, self.args.img_clamping)
 
         # clamp parameters to a cube
         for p in self.networks["txt_discriminator"].parameters():
-            p.data.clamp_(-0.01, 0.01)
+            p.data.clamp_(- self.args.txt_clamping, self.args.txt_clamping)
 
 
 
-        images = add_gaussian(images, std=0.05 * (self.args.epoch_size - epoch)/self.args.epoch_size)
         # train with fake
         if self.use_variational:
             img2img_out, txt2img_out, img2txt_out, txt2txt_out, img_z, txt_z, img_mu, img_logv, txt_mu, txt_logv, = \
@@ -150,17 +154,26 @@ class coupled_vae_gan_trainer(trainer):
             img2img_out, txt2img_out, img2txt_out, txt2txt_out, img_z, txt_z= \
                                  self.networks["coupled_vae"](images.detach(),captions.detach(), lengths)
 
+        images = add_gaussian(images, std=0.05 * (self.args.num_epochs - epoch)/self.args.num_epochs)
+        txt2img_out = add_gaussian(images, std=0.05 * (self.args.num_epochs - epoch)/self.args.num_epochs)
+
+        perm_idz = torch.randperm(self.args.batch_size).cuda()
+
         errD_img_real = self.networks["img_discriminator"](images.detach(), txt_z.detach())
         errD_img_real.backward(self.one, retain_graph = True)
 
         errD_txt_real, _ = self.networks["txt_discriminator"](captions.detach(), img_z.detach(), lengths)
         errD_txt_real.backward(self.one, retain_graph = True)
-        errD_img_fake = self.networks["img_discriminator"](txt2img_out.detach(), txt_z.detach())
+
+        errD_img_fake = (self.networks["img_discriminator"](txt2img_out.detach(), txt_z.detach()) +
+                         self.networks["img_discriminator"](images.detach(), txt_z[perm_idz].detach()))/2
         # errD_img_fake.backward(self.mone, retain_graph = True)
         errD_img_fake.backward(self.mone)
 
+
         gen_lengths = get_gen_lengths(img2txt_out)
-        errD_txt_fake, _ = self.networks["txt_discriminator"](img2txt_out.detach(), img_z.detach(), gen_lengths)
+        errD_txt_fake = (self.networks["txt_discriminator"](img2txt_out.detach(), img_z.detach(), gen_lengths)[0]+
+                            self.networks["txt_discriminator"](captions.detach(), img_z[perm_idz].detach(), lengths)[0])/2
         # errD_txt_fake.backward(self.mone, retain_graph = True)
         errD_txt_fake.backward(self.mone)
 
@@ -198,7 +211,7 @@ class coupled_vae_gan_trainer(trainer):
                                  self.networks["coupled_vae"](images, captions, lengths)
 
             img_rc_loss = img_vae_loss(img2img_out, images, img_mu, img_logv) /\
-                           (self.args.batch_size * (self.args.crop_size**2))
+                           (self.args.batch_size * 3 * (self.args.crop_size**2))
 
             NLL_loss, KL_loss, KL_weight = seq_vae_loss(txt2txt_out, captions,
                                                    lengths, txt_mu, txt_logv, "logistic", self.step, 0.0025,
@@ -222,7 +235,7 @@ class coupled_vae_gan_trainer(trainer):
             lambda_G = 1
 
             gen_len = get_gen_lengths(img2txt_out)
-            errG_txt, _ = self.networks["txt_discriminator"](img2txt_out, img_z, gen_len) * lambda_G
+            errG_txt = self.networks["txt_discriminator"](img2txt_out, img_z, gen_len)[0] * lambda_G
             errG_txt.backward(self.one)
 
             errG_img = self.networks["img_discriminator"](txt2img_out, txt_z) * lambda_G

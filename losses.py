@@ -137,13 +137,13 @@ def masked_nll(logits, target, length):
 # Reconstruction + KL divergence losses summed over all elements and batch
 def img_vae_loss(recon_x, x, mu, logvar):
     # print(recon_x.size(), x.size())
-    flat_dim = x.size(2)**2
+    flat_dim = 3 * x.size(2)**2
     flat_rc_x = recon_x.view(-1, flat_dim)
     flat_x = x.view(-1, flat_dim)
 
     # RC = F.binary_cross_entropy(flat_rc_x, flat_x, size_average=False)
-
-
+    #
+    #
     RC = torch.sum(torch.abs(flat_rc_x - flat_x))
 
     # L2 loss too blurry

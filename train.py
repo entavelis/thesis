@@ -37,7 +37,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument('method', type=str)
 
 parser.add_argument('--cuda', type=str, default='true', help='Set cuda usage')
-parser.add_argument('--epoch_size', type=int, default=200, help='Set epoch size')
 parser.add_argument('--result_path', type=str, default='NONE',
                     help='Set the path the result images will be saved.')
 
@@ -87,7 +86,7 @@ parser.add_argument('--num_layers', type=int, default=1,
                     help='number of layers in lstm')
 
 parser.add_argument('--fixed_embeddings', type=str, default="true")
-parser.add_argument('--num_epochs', type=int, default=40)
+parser.add_argument('--num_epochs', type=int, default=200)
 parser.add_argument('--batch_size', type=int, default= 32)
 parser.add_argument('--num_workers', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.0002)
@@ -99,6 +98,9 @@ parser.add_argument('--cm_loss_weight', type=float, default=0.8)
 parser.add_argument('--common_emb_ratio', type=float, default = 0.8)
 parser.add_argument('--negative_samples', type=int, default = 5)
 
+parser.add_argument('--txt_clamping', type=float, default = 0.01)
+parser.add_argument('--img_clamping', type=float, default = 0.01)
+
 parser.add_argument('--validate', type=str, default = "true")
 parser.add_argument('--load_model', type=str, default = "NONE")
 parser.add_argument('--load_vae', type=str, default = "NONE")
@@ -108,10 +110,12 @@ parser.add_argument('--comment', type=str, default = "NONE")
 parser.add_argument('--dataset', type=str, default = "cub", help = "coco or cub")
 parser.add_argument('--variational', type=str, default = "true")
 
-parser.add_argument('--vae_pretrain_iterations', type=int, default = 10000)
-parser.add_argument('--disc_pretrain_iterations', type=int, default = 1000)
+parser.add_argument('--vae_pretrain_iterations', type=int, default = 0)
+parser.add_argument('--disc_pretrain_iterations', type=int, default = 2000)
 
 parser.add_argument('--weight_sharing', type=str, default = "false")
+parser.add_argument('--use_glove', type=str, default = "false")
+
 #</editor-fold>
 
 def main():
@@ -131,7 +135,7 @@ def main():
     elif args.method == "seq_wgan":
         trainer = seq_wgan_trainer.wgan_trainer
     else:
-        assert True, "Invalid method"
+        assert False, "Invalid method"
 
     # now = datetime.datetime.now()
     # current_date = now.strftime("%m-%d-%H-%M")
@@ -177,7 +181,7 @@ def main():
 
     print("Loading Embeddings...")
 
-    use_glove = False
+    use_glove = args.use_glove == "true"
     if use_glove:
         emb = load_glove_embeddings(emb_path, vocab.word2idx, emb_size)
         word_emb = nn.Embedding(emb.size(0), emb.size(1))
@@ -294,5 +298,6 @@ def main():
 
         # model_trainer.validate(val_loader)
 
+    model_trainer.save_models(-1)
 if __name__ == "__main__":
     main()
