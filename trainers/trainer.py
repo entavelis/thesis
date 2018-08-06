@@ -11,6 +11,7 @@ class trainer( object ):
     networks = {}
     optimizers = {}
     losses = {}
+    metrics = {}
     cuda = True
 
     def __init__( self, args, embeddings, vocab):
@@ -90,7 +91,7 @@ class trainer( object ):
         for net in self.networks.values():
             net.train()
 
-    def save_samples(self, image, img_out, caption, txt_out):
+    def save_samples(self, image, img2img_out, txt2img_out, caption, txt2txt_out, img2txt_out, train = True):
         # subdir_path = os.path.join(self.result_path, str(self.save_counter))
         subdir_path = self.result_path
 
@@ -102,40 +103,52 @@ class trainer( object ):
         # im_or = (images[im_idx].cpu().data.numpy().transpose(1,2,0))*255
         # im = (img_out[im_idx].cpu().data.numpy().transpose(1,2,0))*255
         im_or = (image.cpu().data.numpy().transpose(1, 2, 0) / 2 + .5) * 255
-        im = (img_out.cpu().data.numpy().transpose(1, 2, 0) / 2 + .5) * 255
+        im_rc = (img2img_out.cpu().data.numpy().transpose(1, 2, 0) / 2 + .5) * 255
+        im_gn = (txt2img_out.cpu().data.numpy().transpose(1, 2, 0) / 2 + .5) * 255
         # im = img_out[im_idx].cpu().data.numpy().transpose(1,2,0)*255
 
-        filename_prefix = os.path.join(subdir_path, str(self.save_counter).zfill(3))
+        suffix = str(self.save_counter).zfill(3)
+        if not train:
+            suffix = "test_" + suffix
+        filename_prefix = os.path.join(subdir_path,  suffix)
         scipy.misc.imsave(filename_prefix + '_original.jpg', im_or)
-        scipy.misc.imsave(filename_prefix + '.jpg', im)
+        scipy.misc.imsave(filename_prefix + '_rc.jpg', im_rc)
+        scipy.misc.imsave(filename_prefix + '_gen.jpg', im_gn)
 
-        try:
-            txt_or = " ".join([self.vocab.idx2word[c] for c in caption.cpu().data.numpy()])
-        except:
-            _, generated = torch.topk(caption,1)
-            txt_or = " ".join([self.vocab.idx2word[c] for c in generated[:,0].cpu().data.numpy()])
+        txt_or = " ".join([self.vocab.idx2word[c] for c in caption.cpu().data.numpy()])
 
-        try:
-            _, generated = torch.topk(txt_out,1)
-            txt = " ".join([self.vocab.idx2word[c] for c in generated[:,0].cpu().data.numpy()])
+        _, rc = torch.topk(txt2txt_out,1)
+        txt_rc = " ".join([self.vocab.idx2word[c] for c in rc[:,0].cpu().data.numpy()])
 
-            with open(filename_prefix + "_captions.txt", "w") as text_file:
-                text_file.write("Save_counter %d\n" % self.save_counter)
-                text_file.write("Original:\t %s\n" % txt_or)
-                text_file.write("Generated:\t %s" % txt)
-        except:
-            pass
+        _, generated = torch.topk(img2txt_out,1)
+        txt_gn = " ".join([self.vocab.idx2word[c] for c in generated[:,0].cpu().data.numpy()])
+
+        with open(filename_prefix + "_captions.txt", "w") as text_file:
+            text_file.write("Save_counter %d\n" % self.save_counter)
+            text_file.write("Original:\t %s\n" % txt_or)
+            text_file.write("Recon:\t %s\n" % txt_rc)
+            text_file.write("Generated:\t %s" % txt_gn)
 
 
 
-        self.save_losses()
-        self.save_counter += 1
+        if train:
+            self.save_losses()
+            self.save_counter += 1
+        else:
+            self.save_metrics()
 
     # change names
     def save_losses(self):
         with open(os.path.join(self.result_path,"losses.csv") , "a") as text_file:
             toWrite= str(self.iteration)
             for l_value in self.losses.values():
+                toWrite += ' , {}'.format(l_value.avg)
+            text_file.write(toWrite + "\n")
+
+    def save_metrics(self):
+        with open(os.path.join(self.result_path,"metrics.csv") , "a") as text_file:
+            toWrite= str(self.iteration)
+            for l_value in self.metrics.values():
                 toWrite += ' , {}'.format(l_value.avg)
             text_file.write(toWrite + "\n")
 
@@ -150,6 +163,17 @@ class trainer( object ):
         toWrite +="\n"
 
         with open(os.path.join(self.result_path,"losses.csv") , "w") as text_file: text_file.write(toWrite)
+
+    def create_metrics_meter(self, metrics_name_list):
+        toWrite = "Iteration"
+        for name in metrics_name_list:
+            self.metrics[name] = AverageMeter()
+
+        for name in self.metrics.keys():
+            toWrite += ", " + name
+        toWrite +="\n"
+
+        with open(os.path.join(self.result_path,"metrics.csv") , "w") as text_file: text_file.write(toWrite)
 
     def save_options(self):
         temp = self.args.__dict__

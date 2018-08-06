@@ -27,12 +27,14 @@ class CoupledVAE(nn.Module):
                 drop_out = 0.3,
                 averaged_output = False,
                 weight_sharing = True,
-                use_variational = False):
+                use_variational = False,
+                use_gumbel_generator = False):
 
 
         super(CoupledVAE, self).__init__()
 
         self.tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Tensor
+        self.use_gumbel_generator = use_gumbel_generator
 
         # like rnn-wgan
         self.averaged_output = True
@@ -77,7 +79,7 @@ class CoupledVAE(nn.Module):
         self.encoder_rnn = rnn(embedding_size, hidden_size, num_layers=num_layers, bidirectional=self.bidirectional,
                                batch_first=True)
         self.decoder_rnn = rnn(embedding_size, hidden_size, num_layers=num_layers, bidirectional=self.bidirectional,
-                               batch_first=True)
+                               batch_first=True, dropout = drop_out)
 
         self.hidden_factor = (2 if bidirectional else 1) * num_layers
 
@@ -112,15 +114,19 @@ class CoupledVAE(nn.Module):
             nn.ConvTranspose2d(self.hidden_size, img_dimension * 8, 4, 1, 0, bias=False),
             nn.BatchNorm2d(img_dimension * 8),
             nn.ReLU(True),
+            # nn.Dropout2d(0.3,inplace=True),
             nn.ConvTranspose2d(img_dimension * 8, img_dimension * 4, 4, 2, 1, bias=False),
             nn.BatchNorm2d(img_dimension * 4),
             nn.ReLU(True),
+            # nn.Dropout2d(0.3,inplace=True),
             nn.ConvTranspose2d(img_dimension * 4, img_dimension * 2, 4, 2, 1, bias=False),
             nn.BatchNorm2d(img_dimension * 2),
             nn.ReLU(True),
+            # nn.Dropout2d(0.3,inplace=True),
             nn.ConvTranspose2d(img_dimension * 2,     img_dimension, 4, 2, 1, bias=False),
             nn.BatchNorm2d(img_dimension),
             nn.ReLU(True),
+            # nn.Dropout2d(0.3,inplace=True),
             nn.ConvTranspose2d(img_dimension,      3, 4, 2, 1, bias=False),
             nn.Tanh()
             # nn.Sigmoid()
@@ -179,8 +185,12 @@ class CoupledVAE(nn.Module):
             hidden4txt2txt = self.Z2Hidden_txt4txt(txt_z)
         else:
             hidden4txt2txt = txt_enc
-        # txt2txt_out = self.gumbel_decoder(hidden4txt2txt, input_captions.size(1)) # try_decoder
-        txt2txt_out = self.txt_decoder_forward(hidden4txt2txt, packed_input= self.packed_input, sorted_idx = sorted_idx) # try_decoder
+
+        if self.use_gumbel_generator:
+            txt2txt_out = self.gumbel_decoder(hidden4txt2txt, input_captions.size(1)) # try_decoder
+        else:
+            txt2txt_out = self.txt_decoder_forward(hidden4txt2txt, packed_input= self.packed_input, sorted_idx = sorted_idx) # try_decoder
+            # txt2txt_out = self.feature_decoder_rnn(hidden4txt2txt, input_captions, lengths) # try_decoder
 
 
         # Generation txt2img
@@ -197,8 +207,12 @@ class CoupledVAE(nn.Module):
             hidden4img2txt = self.Z2Hidden_img4txt(torch.cat((img_z[:,:self.common_z_size], txt_noise),1))
         else:
             hidden4img2txt = torch.cat((img_enc[:,:self.common_z_size], txt_noise),1)
-        # img2txt_out = self.gumbel_decoder(hidden4img2txt, input_captions.size(1))
-        img2txt_out = self.txt_decoder_forward(hidden4img2txt, packed_input= self.packed_input, sorted_idx = sorted_idx) # try_decoder
+
+        if self.use_gumbel_generator:
+            img2txt_out = self.gumbel_decoder(hidden4img2txt, input_captions.size(1))
+        else:
+            img2txt_out = self.txt_decoder_forward(hidden4img2txt, packed_input= self.packed_input, sorted_idx = sorted_idx) # try_decoder
+            # img2txt_out = self.feature_decoder_rnn(hidden4img2txt, input_captions, lengths)
 
         if self.use_variational:
             return img2img_out, txt2img_out, img2txt_out, txt2txt_out, img_z, txt_z, img_mu, img_logv,  txt_mu, txt_logv
@@ -295,7 +309,7 @@ class CoupledVAE(nn.Module):
         sorted_lengths, sorted_idx = torch.sort(length, descending=True)
         input_sequence = input_sequence[sorted_idx]
         input_embedding = self.embedding(input_sequence)
-        input_embedding = self.word_dropout(input_embedding)
+        # input_embedding = self.word_dropout(input_embedding)
         packed_input = rnn_utils.pack_padded_sequence(input_embedding, sorted_lengths.data.tolist(), batch_first=True)
 
         return  sorted_idx, packed_input
@@ -312,6 +326,29 @@ class CoupledVAE(nn.Module):
 
         return hidden
 
+    def feature_decoder_rnn(self, features, captions, lengths):
+        """Decode image feature vectors and generates captions."""
+        embeddings = self.embedding(captions)
+        embeddings = torch.cat((features.unsqueeze(1), embeddings), 1)
+        packed = rnn_utils.pack_padded_sequence(embeddings, lengths.data.tolist(), batch_first=True)
+        outputs, _ = self.decoder_rnn(packed)
+
+        # process outputs
+        padded_outputs = rnn_utils.pad_packed_sequence(outputs, batch_first=True)[0]
+        padded_outputs = padded_outputs.contiguous()
+        b,s,_ = padded_outputs.size()
+
+        # project outputs to vocab
+        # logp = nn.functional.log_softmax(self.outputs2vocab(padded_outputs.view(-1, padded_outputs.size(2))), dim=-1)
+        logp = self.outputs2vocab(padded_outputs.view(-1, padded_outputs.size(2)))
+        logp = logp.view(b, s, self.embedding.num_embeddings)
+
+        # gumbel = torch.zeros_like(logp)
+        # for i in range(logp.size(1)):
+        #     gumbel[:,i] = gumbel_softmax(logp[:,i].squeeze()).unsqueeze(1)
+
+        return logp
+
     # DECODER
     def txt_decoder_forward(self, hidden, packed_input, sorted_idx):
 
@@ -327,13 +364,20 @@ class CoupledVAE(nn.Module):
         # packed_input = rnn_utils.pack_padded_sequence(input_embedding, sorted_lengths.data.tolist(), batch_first=True)
 
         # decoder forward pass
+        # input_sequence = to_var(torch.Tensor(self.batch_size).fill_(self.sos_idx).long())
+        # input_sequence = input_sequence.unsqueeze(1)
+        # input_embedding = self.embedding(input_sequence)
+
+        outputs_st, hidden = self.decoder_rnn(hidden.view(self.batch_size,1,self.latent_size))
         outputs, _ = self.decoder_rnn(packed_input, hidden)
+
 
         # process outputs
         padded_outputs = rnn_utils.pad_packed_sequence(outputs, batch_first=True)[0]
         padded_outputs = padded_outputs.contiguous()
         _,reversed_idx = torch.sort(sorted_idx)
         padded_outputs = padded_outputs[reversed_idx]
+        padded_outputs = torch.cat([outputs_st, padded_outputs[:,:-1]],1)
         b,s,_ = padded_outputs.size()
 
         # project outputs to vocab
@@ -356,14 +400,24 @@ class CoupledVAE(nn.Module):
 
         return img2img_out, img_mu, img_logv, img_z
 
-    def reconstruct(self, gen_images, gen_captions):
+    def reconstruct(self, gen_images, gen_captions, gen_len):
+        sorted_lengths, sorted_idx = torch.sort(gen_len, descending=True)
+        gen_captions = gen_captions[sorted_idx]
+        gumbel = torch.zeros_like(gen_captions)
+        for i in range(gen_captions.size(1)):
+            gumbel[:,i] = gumbel_softmax(gen_captions[:,i].squeeze(), tau=0.5).unsqueeze(1)
+
+        gumbel_emb = torch.mm(gumbel.view(-1,gumbel.size(-1)), self.embedding.weight)\
+                .view(gumbel.size(0),-1, self.embedding.embedding_dim)
 
         img_enc = self.img_encoder_forward(gen_images)
-        txt_enc = self.txt_encoder_forward(gen_captions)
+        txt_enc = self.txt_encoder_forward(gumbel_emb)
 
-        img_mu, img_logv, img_z = self.Hidden2Z(img_enc)
-        txt_mu, txt_logv, txt_z = self.Hidden2Z(txt_enc)
+        _,reversed_idx = torch.sort(sorted_idx)
+        txt_enc = txt_enc[reversed_idx]
 
+        img_mu, img_logv, img_z = self.Hidden2Z_img(img_enc)
+        txt_mu, txt_logv, txt_z = self.Hidden2Z_txt(txt_enc)
 
         return img_mu, img_logv, img_z, txt_mu, txt_logv, txt_z
 
@@ -407,18 +461,19 @@ class CoupledVAE(nn.Module):
 
             output, hidden = self.decoder_rnn(input_embedding, hidden)
 
-            logits = F.log_softmax(self.outputs2vocab(output),2)
+            logits = self.outputs2vocab(output)
 
             # input_sequence = output
             # input_sequence = self._sample(logits)
-            input_sequence = gumbel_softmax(logits.squeeze())
+            input_sequence = gumbel_softmax(logits.squeeze(), tau=0.5)
 
             input_embedding = torch.mm(input_sequence, self.embedding.weight).unsqueeze(1)
 
             generations.append(input_sequence.unsqueeze(1))
 
 
-        return torch.log(torch.cat(generations, dim= 1))
+        # return torch.log(torch.cat(generations, dim= 1))
+        return torch.cat(generations, dim= 1)
 
 
         def old_gen(self, generations, input_sequence, sequence_running,t, running_seqs, hidden):

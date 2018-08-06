@@ -71,14 +71,12 @@ parser.add_argument('--caption_path', type=str,
 parser.add_argument('--valid_caption_path', type=str,
                     default='./data/annotations/captions_val2014.json',
                     help='path for valid annotation json file')
-parser.add_argument('--log_step', type=int, default=10,
+parser.add_argument('--log_step', type=int, default=1,
                     help='step size for prining log info')
-parser.add_argument('--save_step', type=int, default=1000,
-                    help='step size for saving trained models')
 
 # Model parameters
 parser.add_argument('--word_embedding_size', type=int, default=300)
-parser.add_argument('--hidden_size', type=int, default=512,
+parser.add_argument('--hidden_size', type=int, default=1024,
                     help='dimension of lstm hidden states')
 parser.add_argument('--latent_size', type=int, default=512,
                     help='dimension of latent vector z')
@@ -86,7 +84,7 @@ parser.add_argument('--num_layers', type=int, default=1,
                     help='number of layers in lstm')
 
 parser.add_argument('--fixed_embeddings', type=str, default="true")
-parser.add_argument('--num_epochs', type=int, default=200)
+parser.add_argument('--num_epochs', type=int, default=1000)
 parser.add_argument('--batch_size', type=int, default= 32)
 parser.add_argument('--num_workers', type=int, default=2)
 parser.add_argument('--learning_rate', type=float, default=0.0002)
@@ -95,13 +93,12 @@ parser.add_argument('--text_criterion', type=str, default='NLLLoss')
 parser.add_argument('--cm_criterion', type=str, default='Cosine')
 parser.add_argument('--cm_loss_weight', type=float, default=0.8)
 
-parser.add_argument('--common_emb_ratio', type=float, default = 0.8)
+parser.add_argument('--common_emb_ratio', type=float, default = 0.5)
 parser.add_argument('--negative_samples', type=int, default = 5)
 
-parser.add_argument('--txt_clamping', type=float, default = 0.01)
+parser.add_argument('--txt_clamping', type=float, default = 0.1)
 parser.add_argument('--img_clamping', type=float, default = 0.01)
 
-parser.add_argument('--validate', type=str, default = "true")
 parser.add_argument('--load_model', type=str, default = "NONE")
 parser.add_argument('--load_vae', type=str, default = "NONE")
 
@@ -110,11 +107,29 @@ parser.add_argument('--comment', type=str, default = "NONE")
 parser.add_argument('--dataset', type=str, default = "cub", help = "coco or cub")
 parser.add_argument('--variational', type=str, default = "true")
 
-parser.add_argument('--vae_pretrain_iterations', type=int, default = 0)
+parser.add_argument('--vae_pretrain_iterations', type=int, default = 10000)
 parser.add_argument('--disc_pretrain_iterations', type=int, default = 2000)
+parser.add_argument('--mixed_training_epoch', type=int, default = -1)
 
 parser.add_argument('--weight_sharing', type=str, default = "false")
 parser.add_argument('--use_glove', type=str, default = "false")
+
+parser.add_argument('--use_gradient_penalty', type=str, default = "false")
+parser.add_argument('--use_feature_matching', type=str, default = "true")
+
+parser.add_argument('--use_parallel_recon', type=str, default = "true")
+parser.add_argument('--use_double_fake_error', type=str, default = "true")
+
+parser.add_argument('--use_gumbel_generator', type=str, default = "false")
+parser.add_argument('--freeze_encoders', type=str, default = "false")
+parser.add_argument('--cycle_consistency', type=str, default = "true")
+parser.add_argument('--cycle_consistency_criterion', type=str, default = "mse")
+
+parser.add_argument('--gan_cycle', type=int, default= 6)
+
+parser.add_argument('--validate', type=str, default = "false")
+
+
 
 #</editor-fold>
 
@@ -126,6 +141,8 @@ def main():
     if args.comment == "NONE":
         args.comment = args.method
 
+    validate = args.validate == "true"
+
     if args.method == "coupled_vae_gan":
         trainer = coupled_vae_gan_trainer.coupled_vae_gan_trainer
     elif args.method =="coupled_vae":
@@ -134,6 +151,8 @@ def main():
         trainer = wgan_trainer.wgan_trainer
     elif args.method == "seq_wgan":
         trainer = seq_wgan_trainer.wgan_trainer
+    elif args.method == "skip_thoughts":
+        trainer = skipthoughts_vae_gan_trainer.coupled_vae_gan_trainer
     else:
         assert False, "Invalid method"
 
@@ -245,15 +264,22 @@ def main():
 
         bar = Bar(args.method if args.comment == "NONE" else args.method + "/" + args.comment, max=len(data_loader))
 
+        model_trainer.set_train_models()
+        model_trainer.create_losses_meter(model_trainer.losses)
+
+
         for i, (images, captions, lengths) in enumerate(data_loader):
             if model_trainer.load_models(epoch):
                 break
 
+            # if i == 1:
             if i == len(data_loader)-1:
                 break
 
             images = to_var(images)
+            # captions = to_var(captions[:,1:])
             captions = to_var(captions)
+            # lengths = to_var(torch.LongTensor(lengths) - 1)            # print(captions.size())
             lengths = to_var(torch.LongTensor(lengths))            # print(captions.size())
 
             model_trainer.forward(epoch,
@@ -267,37 +293,96 @@ def main():
             batch_time.update(time.time() - end)
             end = time.time()
 
-            # plot progress
-            bar.suffix = bcolors.HEADER
-            bar.suffix += '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:}\n'.format(
-                batch=i,
-                size=len(data_loader),
-                bt=batch_time.avg,
-                total=bar.elapsed_td,
-                eta=bar.eta_td,
-                )
-            bar.suffix += bcolors.ENDC
+            if not model_trainer.iteration % args.log_step:
+                # plot progress
+                bar.suffix = bcolors.HEADER
+                # bar.suffix += '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:}\n'.format(
+                bar.suffix += '({batch}/{size}) Iter: {bt:} | Time: {total:}-{eta:}\n'.format(
+                    batch=i,
+                    size=len(data_loader),
+                    # bt=batch_time.val,
+                    bt= model_trainer.iteration,
+                    total=bar.elapsed_td,
+                    eta=bar.eta_td,
+                    )
+                bar.suffix += bcolors.ENDC
 
-            cnt=0
-            for l_name, l_value in sorted(model_trainer.losses.items(), key= lambda x: x[0]):
-                cnt += 1
-                bar.suffix += ' | {name}: {val:.3f}'.format(
-                    name = l_name,
-                    val= l_value.val,
-                )
-                if not cnt % 5:
-                    bar.suffix += "\n"
+                cnt=0
+                for l_name, l_value in sorted(model_trainer.losses.items(), key= lambda x: x[0]):
+                    cnt += 1
+                    bar.suffix += ' | {name}: {val:.3f}'.format(
+                        name = l_name,
+                        val= l_value.avg,
+                    )
+                    if not cnt % 5:
+                        bar.suffix += "\n"
 
-            bar.next()
+                bar.next()
 
         # </editor-fold desc = "Logging">
 
         bar.finish()
-        # if not model_trainer.keep_loading and not model_trainer.iteration % args.model:
-        #     model_trainer.save_models(epoch)
+
+        if validate:
+            print('EPOCH ::: VALIDATION ::: ' + str(epoch + 1))
+            batch_time = AverageMeter()
+            end = time.time()
+            barName = args.method if args.comment == "NONE" else args.method + "/" + args.comment
+            barName = "VAL:" + barName
+            bar = Bar(barName, max=len(val_loader))
+
+            model_trainer.set_eval_models()
+            model_trainer.create_metrics_meter(model_trainer.metrics)
+
+            for i, (images, captions, lengths) in enumerate(val_loader):
+            # if not model_trainer.keep_loading and not model_trainer.iteration % args.model:
+            #     model_trainer.save_models(epoch)
+
+                if i == len(val_loader)-1:
+                    break
+
+                images = to_var(images)
+                captions = to_var(captions[:,1:])
+                # lengths = to_var(torch.LongTensor(lengths - 1))            # print(captions.size())
+
+                model_trainer.evaluate(epoch,
+                                  images,
+                                  captions,
+                                  lengths,
+                                  i == 0)
+
+                # measure elapsed time
+                batch_time.update(time.time() - end)
+                end = time.time()
+
+                # plot progress
+                bar.suffix = bcolors.HEADER
+                # bar.suffix += '({batch}/{size}) Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:}\n'.format(
+                bar.suffix += '({batch}/{size}) Iter: {bt:} | Time: {total:}-{eta:}\n'.format(
+                    batch=i,
+                    size=len(val_loader),
+                    # bt=batch_time.val,
+                    bt= model_trainer.iteration,
+                    total=bar.elapsed_td,
+                    eta=bar.eta_td,
+                    )
+                bar.suffix += bcolors.ENDC
+
+                cnt=0
+                for l_name, l_value in sorted(model_trainer.metrics.items(), key= lambda x: x[0]):
+                    cnt += 1
+                    bar.suffix += ' | {name}: {val:.3f}'.format(
+                        name = l_name,
+                        val= l_value.avg,
+                    )
+                    if not cnt % 5:
+                        bar.suffix += "\n"
+
+                bar.next()
+
+            bar.finish()
 
         # model_trainer.validate(val_loader)
-
     model_trainer.save_models(-1)
 if __name__ == "__main__":
     main()

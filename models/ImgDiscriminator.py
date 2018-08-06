@@ -13,9 +13,13 @@ class ImgDiscriminator(nn.Module):
 
         super(ImgDiscriminator, self).__init__()
         self.batch_size = batch_size
+        self.latent_size = latent_size
         self.masked_size = int(latent_size * mask)
-        if mask>0:
+        if mask == 1.0:
+            self.seq_embedding = nn.Linear(self.latent_size, 128*4*4)
+        elif mask>0:
             self.seq_embedding = nn.Linear(self.masked_size, 128*4*4)
+
 
         self.conv1 = nn.Conv2d(3, img_dimension, 4, 2, 1, bias=False)
         self.relu1 = nn.LeakyReLU(betaReLU, inplace=True)
@@ -52,11 +56,14 @@ class ImgDiscriminator(nn.Module):
         relu4 = self.relu4( bn4 )
 
         if self.masked_size > 0:
-            seq = self.seq_embedding(seq_emb[:,:self.masked_size])
+            if self.masked_size == self.latent_size:
+                seq = self.seq_embedding(seq_emb)
+            else:
+                seq = self.seq_embedding(seq_emb[:,:self.masked_size])
             augmented = torch.cat([relu4, seq.view(self.batch_size, 128,4,4)],1)
             conv5 = self.conv5(augmented)
         else:
             conv5 = self.conv5(relu4)
 
-        return torch.sigmoid(conv5).mean(0).view(1) #, [relu2, relu3, relu4]
+        return torch.sigmoid(conv5).mean(0).view(1), [relu2, relu3, relu4]
 

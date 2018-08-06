@@ -170,22 +170,27 @@ def kl_loss(mean, logv):
     kl =  -0.5 * torch.sum(1 + logv - mean.pow(2) - logv.exp())
     return kl/mean.size(0)
 
-def seq_vae_loss(logp, target, length, mean, logv, anneal_function, step, k, x0):
+def seq_vae_loss(logp_txt, logp_img, target, length, mean, logv, anneal_function, step, k, x0):
         # cut-off unnecessary padding from target, and flatten
     # NLL = torch.nn.NLLLoss(size_average=False, ignore_index=0)
 
     # target = target[:, :torch.max(length).data[0]].contiguous().view(-1)
-    # logp = logp.view(-1, logp.size(2))
+    # logp_img = logp_img.view(-1, logp_img.size(2))
+    # logp_txt = logp_txt.view(-1, logp_txt.size(2))
+    # target = target[:,1:].contiguous()
+    # logp_img = logp_img[:,:-1].contiguous()
+    # logp_txt = logp_txt[:,:-1].contiguous()
 
     # Negative Log Likelihood
     # NLL_loss = NLL(logp, target)
-    NLL_loss = masked_cross_entropy(logp, target, length)
+    NLL_loss_txt = masked_cross_entropy(logp_txt, target, length)
+    NLL_loss_img = masked_cross_entropy(logp_img, target, length)
 
     # KL Divergence
     KL_loss = -0.5 * torch.sum(1 + logv - mean.pow(2) - logv.exp())
     KL_weight = kl_anneal_function(anneal_function, step, k, x0)
 
-    return NLL_loss, KL_loss, KL_weight
+    return NLL_loss_txt, NLL_loss_img, KL_loss, KL_weight
 
 def crossmodal_loss(txt_z, img_z, mask, cm_type, cm_criterion, negative_samples, epoch):
     # txt = txt_z.narrow(1,0,mask)
@@ -250,8 +255,8 @@ def get_gan_loss(dis_real, dis_fake, criterion, cuda):
 
 
 # improved wgan in pytorch
-def calc_gradient_penalty(netD, real_data, fake_data, img = True):
-    # print "real_data: ", real_data.size(), fake_data.size()
+
+def calc_gradient_penalty(netD, real_data, fake_data, emb, img = True): # print "real_data: ", real_data.size(), fake_data.size()
 
     BATCH_SIZE = fake_data.size(0)
     alpha = torch.rand(BATCH_SIZE, 1)
@@ -272,7 +277,7 @@ def calc_gradient_penalty(netD, real_data, fake_data, img = True):
     # interpolates = Variable(interpolates, requires_grad=True)
     # interpolates.weights.requires_grad = True
 
-    disc_interpolates = netD(interpolates)
+    disc_interpolates = netD(interpolates, emb)[0]
 
     gradients = grad(outputs=disc_interpolates, inputs=interpolates,
                               grad_outputs=torch.ones(disc_interpolates.size()).cuda(),

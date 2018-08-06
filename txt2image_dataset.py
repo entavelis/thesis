@@ -44,7 +44,7 @@ class Text2ImageDataset(Dataset):
         # pdb.set_trace()
 
         images = bytes(np.array(example['img']))
-        images = Image.open(io.BytesIO(images)).resize((64, 64)).convert('RGB')
+        images = Image.open(io.BytesIO(images)).resize((70, 70)).convert('RGB')
         # images = self.validate_image(images)
         # images = torch.Tensor(images)
 
@@ -52,7 +52,7 @@ class Text2ImageDataset(Dataset):
             images = self.transform(images)
 
         caption = str(np.array(example['txt']).astype(str))
-        # Convert caption (string) to word ids.
+        # # Convert caption (string) to word ids.
         tokens = nltk.tokenize.word_tokenize(str(caption).lower())
         caption = []
         caption.append(vocab('<start>'))
@@ -60,7 +60,9 @@ class Text2ImageDataset(Dataset):
         caption.append(vocab('<end>'))
         target = torch.Tensor(caption)
 
-        return images, target
+        embs = torch.Tensor(np.array(example['embeddings'], dtype=float))
+
+        return images, target, embs
 
     def validate_image(self, img):
         img = np.array(img, dtype=float)
@@ -91,7 +93,7 @@ def collate_fn(data):
     """
     # Sort a data list by caption length (descending order).
     data.sort(key=lambda x: len(x[1]), reverse=True)
-    images, captions = zip(*data)
+    images, captions, embs = zip(*data)
 
     # Merge images (from tuple of 3D tensor to 4D tensor).
     images = torch.stack(images, 0)
@@ -102,4 +104,4 @@ def collate_fn(data):
     for i, cap in enumerate(captions):
         end = lengths[i]
         targets[i, :end] = cap[:end]
-    return images, targets, lengths
+    return images, targets, embs
